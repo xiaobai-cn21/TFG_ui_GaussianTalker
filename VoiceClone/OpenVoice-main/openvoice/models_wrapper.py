@@ -82,6 +82,14 @@ class BaseSpeakerTTS:
         return np.array(audio_segments).astype(np.float32)
 
     def tts(self, text, output_path, speaker, language='English', speed=1.0):
+        if output_path is None:
+            raise ValueError("output_path cannot be None")
+
+        # 如果 output_path 只有文件名，没有目录
+        output_dir = os.path.dirname(output_path)
+        if output_dir != "":
+            os.makedirs(output_dir, exist_ok=True)
+
         mark = self.language_marks.get(language.lower())
         assert mark is not None, f"language {language} is not supported"
 
@@ -91,17 +99,26 @@ class BaseSpeakerTTS:
         with torch.no_grad():
             x_tst = stn_tst.unsqueeze(0).to(self.device)
             x_tst_lengths = torch.LongTensor([stn_tst.size(0)]).to(self.device)
+
             speaker_id = self.hps.speakers[speaker]
             sid = torch.LongTensor([speaker_id]).to(self.device)
+
             audio = self.model.infer(
                 x_tst, x_tst_lengths, sid=sid,
-                noise_scale=0.667, noise_scale_w=0.6,
-                length_scale=1.0/speed
+                noise_scale=0.667,
+                noise_scale_w=0.6,
+                length_scale=1.0 / speed
             )[0][0, 0].cpu().numpy()
 
-        audio_out = self.audio_numpy_concat([audio], sr=self.hps.data.sampling_rate, speed=speed)
+        audio_out = self.audio_numpy_concat(
+            [audio],
+            sr=self.hps.data.sampling_rate,
+            speed=speed
+        )
+
         soundfile.write(output_path, audio_out, self.hps.data.sampling_rate)
         return output_path
+
 
 
 class ToneColorConverter(BaseSpeakerTTS):

@@ -3,62 +3,109 @@
 import os
 import torch
 from openvoice.models_wrapper import BaseSpeakerTTS, ToneColorConverter
-from openvoice import utils
 
-# ===============================
-# 自动获取 VoiceClone 根目录
-# ===============================
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ===== 官方 TTS 模型（必须有 config.json）=====
+en_tts_dir = os.path.join(BASE_DIR, "checkpoints", "base_speakers", "EN")
+zh_tts_dir = os.path.join(BASE_DIR, "checkpoints", "base_speakers", "ZH")
+
+# ===== 音色转换模型 =====
+converter_dir = os.path.join(BASE_DIR, "checkpoints", "converter")
+
+# ===== checkpoints_v2 音色 =====
+SE_V2_DIR = os.path.join(
+    BASE_DIR, "checkpoints_v2", "base_speakers", "ses"
+)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# ===== 初始化模型 =====
+en_tts = BaseSpeakerTTS(
+    os.path.join(en_tts_dir, "config.json"),
+    device=device
+)
+en_tts.load_ckpt(os.path.join(en_tts_dir, "checkpoint.pth"))
+
+zh_tts = BaseSpeakerTTS(
+    os.path.join(zh_tts_dir, "config.json"),
+    device=device
+)
+zh_tts.load_ckpt(os.path.join(zh_tts_dir, "checkpoint.pth"))
+
+tone_converter = ToneColorConverter(
+    os.path.join(converter_dir, "config.json"),
+    device=device
+)
+tone_converter.load_ckpt(
+    os.path.join(converter_dir, "checkpoint.pth")
+)
 
 
-en_ckpt_base = os.path.join(BASE_DIR, 'checkpoints', 'base_speakers', 'EN')
-zh_ckpt_base = os.path.join(BASE_DIR, 'checkpoints', 'base_speakers', 'ZH')
-ckpt_converter = os.path.join(BASE_DIR, 'checkpoints', 'converter')
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-# ===============================
-# 初始化模型
-# ===============================
-en_base_speaker_tts = BaseSpeakerTTS(os.path.join(en_ckpt_base, 'config.json'), device=device)
-en_base_speaker_tts.load_ckpt(os.path.join(en_ckpt_base, 'checkpoint.pth'))
-
-zh_base_speaker_tts = BaseSpeakerTTS(os.path.join(zh_ckpt_base, 'config.json'), device=device)
-zh_base_speaker_tts.load_ckpt(os.path.join(zh_ckpt_base, 'checkpoint.pth'))
-
-tone_color_converter = ToneColorConverter(os.path.join(ckpt_converter, 'config.json'), device=device)
-tone_color_converter.load_ckpt(os.path.join(ckpt_converter, 'checkpoint.pth'))
-
-# ===============================
-# 定义语音克隆接口
-# ===============================
-def synthesize(text, speaker='default', language='en', ref_audio=None, output_path='outputs/output.wav'):
+# ======================================================
+# 对外接口：用 checkpoints_v2 的 en-default.pth 做声音克隆
+# ======================================================
+def synthesize(
+    text,
+    language="en",
+    output_path="outputs/output.wav",
+    ref_audio=None,                 # 👈 新增：参考音频
+    v2_se_name="en-default.pth",    # 👈 兜底方案
+):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-    if language.lower() in ['en', 'english']:
-        model = en_base_speaker_tts
-        source_se_path = os.path.join(en_ckpt_base, 'en_default_se.pth')
-        model_language = 'english'
-    elif language.lower() in ['zh', 'chinese']:
-        model = zh_base_speaker_tts
-        source_se_path = os.path.join(zh_ckpt_base, 'zh_default_se.pth')
-        model_language = 'chinese'
+    ref_audio = os.path.join(BASE_DIR, ref_audio)
+    # ===== 选择 TTS 模型 =====
+    if language.lower() in ["en", "english"]:
+        tts_model = en_tts
+        src_se = torch.load(
+            os.path.join(en_tts_dir, "en_default_se.pth"),
+            map_location=device
+        )
+        lang_flag = "english"
+    elif language.lower() in ["zh", "chinese"]:
+        tts_model = zh_tts
+        src_se = torch.load(
+            os.path.join(zh_tts_dir, "zh_default_se.pth"),
+            map_location=device
+        )
+        lang_flag = "chinese"
     else:
-        raise ValueError(f"Language {language} not supported")
+        raise ValueError("Unsupported language")
 
-    source_se = torch.load(source_se_path).to(device)
-    tmp_path = os.path.join(os.path.dirname(output_path), 'tmp.wav')
+    tmp_wav = output_path.replace(".wav", "_tmp.wav")
 
-    # TTS
-    model.tts(text, tmp_path, speaker=speaker, language=model_language)
+    # ===== 1️⃣ TTS 生成基础语音 =====
+    speaker = list(tts_model.hps.speakers.keys())[0]
+    tts_model.tts(
+        text=text,
+        output_path=tmp_wav,
+        speaker=speaker,
+        language=lang_flag,
+    )
 
-    # 如果提供参考音频，进行声色克隆
+    # ===== 2️⃣ 获取目标音色（重点）=====
     if ref_audio is not None:
-        tgt_se = tone_color_converter.extract_se(ref_audio)
-        tone_color_converter.convert(tmp_path, source_se, tgt_se, output_path)
-        os.remove(tmp_path)
-    else:
-        os.rename(tmp_path, output_path)
+        if not os.path.isfile(ref_audio):
+            raise FileNotFoundError(ref_audio)
 
-    print(f"Audio saved to {output_path}")
-    return output_path
+        print(f"🎤 Using reference audio: {ref_audio}")
+        tgt_se = tone_converter.extract_se(ref_audio)
+
+    else:
+        print(f"🎭 Using v2 preset voice: {v2_se_name}")
+        tgt_se_path = os.path.join(SE_V2_DIR, v2_se_name)
+        if not os.path.isfile(tgt_se_path):
+            raise FileNotFoundError(tgt_se_path)
+        tgt_se = torch.load(tgt_se_path, map_location=device)
+
+    # ===== 3️⃣ 音色转换 =====
+    tone_converter.convert(
+        audio_src_path=tmp_wav,
+        src_se=src_se.to(device),
+        tgt_se=tgt_se.to(device),
+        output_path=output_path,
+    )
+
+    os.remove(tmp_wav)
+    print(f"✅ Audio saved to {output_path}")
+
