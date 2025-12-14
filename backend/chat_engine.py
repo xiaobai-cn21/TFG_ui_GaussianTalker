@@ -3,6 +3,8 @@ import subprocess
 import speech_recognition as sr
 from zhipuai import ZhipuAI
 import pyttsx3
+import shutil
+import time
 from backend.voice_cloner import synthesize_with_clone
 
 def chat_response(data):
@@ -93,7 +95,51 @@ def chat_pipeline(data):
     if not tts_audio_path:
         tts_audio_path = text_to_speech(ai_response, output_audio)
 
+    # ==== 新增：GaussianTalker数字人视频生成 ====
     video_path = os.path.join("static", "videos", "chat_response.mp4")
+    
+    # 获取数字人模型参数
+    model_name = data.get('model_name', '')  # e.g., "GaussianTalker" or "SyncTalk"
+    model_param = data.get('model_param', '')  # e.g., "obama"
+    
+    # 如果选择了数字人模型并提供了模型目录，则生成数字人视频
+    if model_name and model_param and tts_audio_path and os.path.exists(tts_audio_path):
+        print(f"[backend.chat_engine] 开始生成数字人视频：模型={model_name}, 目录={model_param}")
+        try:
+            from backend.video_generator import generate_video
+            
+            # 构造传递给generate_video的数据
+            video_gen_data = {
+                "model_name": model_name,
+                "model_param": model_param,
+                "ref_audio": tts_audio_path,
+                "gpu_choice": data.get('gpu_choice', 'GPU0'),
+                "batch_size": data.get('batch_size', '128'),
+                "iteration": data.get('iteration', '10000')
+            }
+            
+            video_gen_result = generate_video(video_gen_data)
+            
+            if video_gen_result.get("status") == "success":
+                generated_video = video_gen_result.get("video_path")
+                if generated_video and os.path.exists(generated_video):
+                    video_path = generated_video
+                    print(f"[backend.chat_engine] 数字人视频生成成功：{video_path}")
+                else:
+                    print(f"[backend.chat_engine] 视频生成返回成功但文件不存在：{generated_video}")
+            else:
+                error_msg = video_gen_result.get('message', '未知错误')
+                print(f"[backend.chat_engine] 数字人视频生成失败：{error_msg}")
+                # 失败时使用占位视频（保持原有行为）
+                
+        except Exception as e:
+            print(f"[backend.chat_engine] 数字人视频生成异常：{e}")
+            import traceback
+            traceback.print_exc()
+            # 异常时使用占位视频（保持原有行为）
+    else:
+        print("[backend.chat_engine] 未启用数字人视频生成（未选择模型或音频不可用）")
+    
     return {
         "recognized_text": recognized_text,
         "ai_text": ai_response,

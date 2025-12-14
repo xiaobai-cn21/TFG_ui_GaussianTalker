@@ -217,10 +217,10 @@
             <form id="chatForm">
                 <div class="form-group">
                     <label>模型名称</label>
-                    <select name="model_name">
-                        <option value="model1">Model 1</option>
-                        <option value="model2">Model 2</option>
+                    <select name="model_name" id="chatModelName">
+                        <option value="">不使用数字人（仅语音）</option>
                         <option value="SyncTalk">SyncTalk</option>
+                        <option value="GaussianTalker">GaussianTalker</option>
                     </select>
                 </div>
 
@@ -240,6 +240,25 @@
                 </div>
 
                 <div class="form-group">
+                    <label>GPU选择</label>
+                    <select name="gpu_choice">
+                        <option value="GPU0">GPU 0</option>
+                        <option value="GPU1">GPU 1</option>
+                        <option value="CPU">CPU</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="chatBatchSizeGroup" style="display:none;">
+                    <label>Batch Size（GaussianTalker）</label>
+                    <input type="number" name="batch_size" min="1" value="128">
+                </div>
+
+                <div class="form-group" id="chatIterationGroup" style="display:none;">
+                    <label>Iteration（GaussianTalker检查点）</label>
+                    <input type="number" name="iteration" min="1" value="10000">
+                </div>
+
+                <div class="form-group">
                     <label>对话API选择</label>
                     <select name="api_choice">
                         <option value="openai">OpenAI API</option>
@@ -253,6 +272,27 @@
     </div>
 
     <script>
+        // 控制GaussianTalker字段的显示/隐藏
+        document.addEventListener('DOMContentLoaded', function() {
+            const modelSelect = document.getElementById('chatModelName');
+            const batchSizeGroup = document.getElementById('chatBatchSizeGroup');
+            const iterationGroup = document.getElementById('chatIterationGroup');
+            
+            function toggleGaussianTalkerFields() {
+                const selectedModel = modelSelect.value;
+                if (selectedModel === 'GaussianTalker') {
+                    batchSizeGroup.style.display = 'block';
+                    iterationGroup.style.display = 'block';
+                } else {
+                    batchSizeGroup.style.display = 'none';
+                    iterationGroup.style.display = 'none';
+                }
+            }
+            
+            modelSelect.addEventListener('change', toggleGaussianTalkerFields);
+            toggleGaussianTalkerFields(); // 初始化
+        });
+
         // 语音录制功能
         let mediaRecorder;
         let audioChunks = [];

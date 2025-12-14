@@ -81,6 +81,9 @@ def chat_system():
             "model_param": request.form.get('model_param'),
             "voice_clone": request.form.get('voice_clone'),
             "api_choice": request.form.get('api_choice'),
+            "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
+            "batch_size": request.form.get('batch_size', '128'),
+            "iteration": request.form.get('iteration', '10000'),
         }
 
         try:

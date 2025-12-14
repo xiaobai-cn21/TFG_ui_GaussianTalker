@@ -1,0 +1,234 @@
+[1mdiff --git a/.gitignore b/.gitignore[m
+[1mindex 19936a2..b28ca52 100644[m
+[1m--- a/.gitignore[m
+[1m+++ b/.gitignore[m
+[36m@@ -7,8 +7,55 @@[m [mbuild/[m
+ dist/[m
+ *.egg-info/[m
+ [m
+[32m+[m[32m# GaussianTalker训练输出（大文件，不上传）[m
+[32m+[m[32mGaussianTalker/data/[m
+[32m+[m[32mGaussianTalker/output/[m
+[32m+[m[32mGaussianTalker/.cache/[m
+[32m+[m
+[32m+[m[32m# SyncTalk训练输出[m
+ SyncTalk/SyncTalk/[m
+[32m+[m[32mSyncTalk/model/[m
+[32m+[m[32mSyncTalk/checkpoints/[m
+ [m
+[32m+[m[32m# 其他模块[m
+ GPT-SoVITS/[m
+ [m
+[31m-test_data/[m
+\ No newline at end of file[m
+[32m+[m[32m# 测试数据[m
+[32m+[m[32mtest_data/[m
+[32m+[m
+[32m+[m[32m# 模型文件（大文件）[m
+[32m+[m[32m*.pth[m
+[32m+[m[32m*.ckpt[m
+[32m+[m[32m*.pt[m
+[32m+[m[32m*.ply[m
+[32m+[m
+[32m+[m[32m# 视频和音频（大文件）[m
+[32m+[m[32m*.mp4[m
+[32m+[m[32m*.avi[m
+[32m+[m[32m*.wav[m
+[32m+[m[32m*.mp3[m
+[32m+[m
+[32m+[m[32m# 数据文件[m
+[32m+[m[32m*.npy[m
+[32m+[m[32m*.mat[m
+[32m+[m[32m*.h5[m
+[32m+[m
+[32m+[m[32m# 训练日志[m
+[32m+[m[32m*.log[m
+[32m+[m[32mwandb/[m
+[32m+[m
+[32m+[m[32m# 生成的视频[m
+[32m+[m[32mstatic/videos/*.mp4[m
+[32m+[m[32mstatic/audios/*.wav[m
+[32m+[m
+[32m+[m[32m# 系统文件[m
+[32m+[m[32m.DS_Store[m
+[32m+[m[32mThumbs.db[m
+[32m+[m
+[32m+[m[32m# IDE[m
+[32m+[m[32m.vscode/[m
+[32m+[m[32m.idea/[m
+[32m+[m[32m*.swp[m
+[32m+[m[32m*.swo[m
+[32m+[m
+[32m+[m[32mtesttt/[m
+\ No newline at end of file[m
+[1mdiff --git a/GaussianTalker/.dockerignore b/GaussianTalker/.dockerignore[m
+[1mindex 23a2f7e..88c3a8c 100644[m
+[1m--- a/GaussianTalker/.dockerignore[m
+[1m+++ b/GaussianTalker/.dockerignore[m
+[36m@@ -14,3 +14,5 @@[m [m__pycache__/[m
+ *.pth[m
+ *.ply[m
+ [m
+[41m+[m
+[41m+[m
+[1mdiff --git a/GaussianTalker/.gitignore b/GaussianTalker/.gitignore[m
+[1mindex fc059b3..60ef1f2 100644[m
+[1m--- a/GaussianTalker/.gitignore[m
+[1m+++ b/GaussianTalker/.gitignore[m
+[36m@@ -16,3 +16,4 @@[m [mwandb/[m
+ [m
+ render_orig.py[m
+ [m
+[32m+[m[32mtesttt/[m
+\ No newline at end of file[m
+[1mdiff --git a/GaussianTalker/Dockerfile b/GaussianTalker/Dockerfile[m
+[1mdeleted file mode 100644[m
+[1mindex 7dd17a2..0000000[m
+[1m--- a/GaussianTalker/Dockerfile[m
+[1m+++ /dev/null[m
+[36m@@ -1,63 +0,0 @@[m
+[31m-FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04[m
+[31m-[m
+[31m-# 设置环境变量[m
+[31m-ENV PYTHON_VERSION=3.7 \[m
+[31m-    PYTHONUNBUFFERED=1 \[m
+[31m-    DEBIAN_FRONTEND=noninteractive \[m
+[31m-    TZ=Asia/Shanghai \[m
+[31m-    TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6+PTX" \[m
+[31m-    PYTHONPATH=/GaussianTalker[m
+[31m-[m
+[31m-# 安装系统依赖[m
+[31m-RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \[m
+[31m-    apt-get update && apt-get install -y \[m
+[31m-    build-essential \[m
+[31m-    cmake \[m
+[31m-    g++ \[m
+[31m-    gcc \[m
+[31m-    python3.7 \[m
+[31m-    python3.7-dev \[m
+[31m-    python3-pip \[m
+[31m-    python3.7-venv \[m
+[31m-    python3-tk \[m
+[31m-    tk-dev \[m
+[31m-    ffmpeg \[m
+[31m-    libsm6 \[m
+[31m-    libxext6 \[m
+[31m-    libxrender-dev \[m
+[31m-    libgl1-mesa-glx \[m
+[31m-    git \[m
+[31m-    wget \[m
+[31m-    curl \[m
+[31m-    unzip \[m
+[31m-    portaudio19-dev \[m
+[31m-    libgomp1 \[m
+[31m-    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1 \[m
+[31m-    && update-alternatives --install /usr/bin/python python /usr/bin/python3.7 1 \[m
+[31m-    && python3 -m pip install --upgrade pip \[m
+[31m-    && apt-get clean \[m
+[31m-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*[m
+[31m-[m
+[31m-# 设置工作目录[m
+[31m-WORKDIR /GaussianTalker[m
+[31m-[m
+[31m-# 复制项目文件[m
+[31m-COPY . .[m
+[31m-[m
+[31m-# 克隆预训练模型，避免每次启动容器重新下载[m
+[31m-COPY ./.cache/torch/hub/checkpoints /root/.cache/torch/hub/checkpoints[m
+[31m-[m
+[31m-# 安装所有Python依赖[m
+[31m-RUN pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117 && \[m
+[31m-    pip install -r requirements.txt && \[m
+[31m-    pip install "git+https://github.com/facebookresearch/pytorch3d.git" && \[m
+[31m-    pip install tensorflow-gpu==2.8.0 && \[m
+[31m-    pip install --upgrade "protobuf<=3.20.1" && \[m
+[31m-    pip install -e submodules/custom-bg-depth-diff-gaussian-rasterization && \[m
+[31m-    pip install -e submodules/simple-knn && \[m
+[31m-    rm -rf ./.cache/ && \[m
+[31m-    pip cache purge[m
+[31m-[m
+[31m-# 默认命令[m
+[31m-CMD ["python", "--help"][m
+[31m-[m
+[1mdiff --git "a/GaussianTalker/GaussianTalker_Docker\350\260\203\347\224\250\350\257\264\346\230\216.md" "b/GaussianTalker/GaussianTalker_Docker\350\260\203\347\224\250\350\257\264\346\230\216.md"[m
+[1mindex 4736e23..bd5a3a3 100644[m
+[1m--- "a/GaussianTalker/GaussianTalker_Docker\350\260\203\347\224\250\350\257\264\346\230\216.md"[m
+[1m+++ "b/GaussianTalker/GaussianTalker_Docker\350\260\203\347\224\250\350\257\264\346\230\216.md"[m
+[36m@@ -302,3 +302,5 @@[m [mA: 使用`data_utils/deepspeech_features/extract_ds_features.py`脚本提取音[m
+ [m
+ GaussianTalker采用非商业研究许可证。详见LICENSE.md。[m
+ [m
+[41m+[m
+[41m+[m
+[1mdiff --git "a/GaussianTalker/GaussianTalker_\345\256\236\346\226\275\346\214\207\345\215\227.md" "b/GaussianTalker/GaussianTalker_\345\256\236\346\226\275\346\214\207\345\215\227.md"[m
+[1mnew file mode 100644[m
+[1mindex 0000000..21dff7c[m
+[1m--- /dev/null[m
+[1m+++ "b/GaussianTalker/GaussianTalker_\345\256\236\346\226\275\346\214\207\345\215\227.md"[m
+[36m@@ -0,0 +1,725 @@[m
+[32m+[m[32m# GaussianTalker 微调、优化、训练 - 实施指南[m
+[32m+[m
+[32m+[m[32m> 本文档为GaussianTalker模型的微调、优化、训练工作提供详细的实施指南和最佳实践。[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 📋 任务清单[m
+[32m+[m
+[32m+[m[32m根据分工指引，本部分的主要任务包括：[m
+[32m+[m
+[32m+[m[32m- [x] ✅ **基础框架已完成** - 所有代码文件已就位[m
+[32m+[m[32m- [ ] ⏳ **Docker镜像构建和测试**[m[41m [m
+[32m+[m[32m- [ ] ⏳ **下载并配置预训练模型（BFM等）**[m
+[32m+[m[32m- [ ] ⏳ **使用测试数据完整训练流程**[m
+[32m+[m[32m- [ ] ⏳ **模型调试和参数优化**[m
+[32m+[m[32m- [ ] ⏳ **探索性改进**[m
+[32m+[m[32m- [ ] ⏳ **后端接口测试和微调**[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 🚀 快速开始（5步走）[m
+[32m+[m
+[32m+[m[32m### 第1步：环境准备[m
+[32m+[m
+[32m+[m[32m#### 1.1 检查系统要求[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 检查NVIDIA驱动和CUDA[m
+[32m+[m[32mnvidia-smi[m
+[32m+[m
+[32m+[m[32m# 检查Docker[m
+[32m+[m[32mdocker --version[m
+[32m+[m
+[32m+[m[32m# 检查磁盘空间（至少50GB空闲）[m
+[32m+[m[32mdf -h[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m**最低配置**：[m
+[32m+[m[32m- GPU: NVIDIA RTX 3090 或更高（12GB+ VRAM）[m
+[32m+[m[32m- 内存: 16GB+ RAM[m
+[32m+[m[32m- 存储: 50GB+ 可用空间[m
+[32m+[m[32m- CUDA: 11.3+[m
+[32m+[m[32m- Docker: 20.10+[m
+[32m+[m
+[32m+[m[32m#### 1.2 设置工作目录[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mcd TFG_ui_GaussianTalker/GaussianTalker[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 第2步：下载预训练模型[m
+[32m+[m
+[32m+[m[32m#### 2.1 自动下载脚本[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 执行自动下载脚本[m
+[32m+[m[32mchmod +x download_pretrained.sh[m
+[32m+[m[32m./download_pretrained.sh[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m该脚本会自动下载：[m
+[32m+[m[32m- ✅ Hubert音频特征模型[m
+[32m+[m[32m- ✅ Wav2Vec音频模型[m
+[32m+[m[32m- ✅ 人脸解析模型[m
+[32m+[m[32m- ✅ 其他预训练权重[m
+[
