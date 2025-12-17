@@ -22,10 +22,11 @@
             <form id="trainForm">
                 <div class="form-group">
                     <label>模型选择</label>
-                    <select name="model_choice">
+                    <select name="model_choice" id="model_choice_select">
                         <option value="modelA">Model A</option>
                         <option value="modelB">Model B</option>
                         <option value="SyncTalk">SyncTalk</option>
+                        <option value="GaussianTalker">GaussianTalker</option>
                     </select>
                 </div>
 
@@ -47,6 +48,25 @@
                     <input type="number" name="epoch" min="1" value="10">
                 </div>
 
+                <!-- GaussianTalker专用参数 -->
+                <div class="form-group" id="gt_iterations_group" style="display: none;">
+                    <label>Iterations (GaussianTalker训练迭代次数)</label>
+                    <input type="number" name="iterations" value="10000" min="1000" step="1000">
+                </div>
+
+                <div class="form-group" id="gt_config_group" style="display: none;">
+                    <label>配置文件 (GaussianTalker)</label>
+                    <input type="text" name="config" value="arguments/64_dim_1_transformer.py" placeholder="默认: arguments/64_dim_1_transformer.py">
+                </div>
+
+                <div class="form-group" id="gt_au_group" style="display: none;">
+                    <label>
+                        <input type="checkbox" id="use_manual_au" name="use_manual_au" value="1">
+                        手动上传AU文件 (如果OpenFace封装失败)
+                    </label>
+                    <input type="file" name="au_csv" id="au_csv_file" accept=".csv" style="display: none; margin-top: 10px;">
+                </div>
+
                 <div class="form-group">
                     <label>自定义训练参数</label>
                     <textarea name="custom_params" placeholder="请输入自定义参数..."></textarea>
@@ -58,6 +78,29 @@
     </div>
 
     <script>
+        // 根据模型选择显示/隐藏GaussianTalker专用参数
+        const modelSelect = document.getElementById('model_choice_select');
+        const gtIterationsGroup = document.getElementById('gt_iterations_group');
+        const gtConfigGroup = document.getElementById('gt_config_group');
+        const gtAuGroup = document.getElementById('gt_au_group');
+        const useManualAuCheckbox = document.getElementById('use_manual_au');
+        const auCsvFileInput = document.getElementById('au_csv_file');
+
+        function toggleGaussianTalkerOptions() {
+            const isGT = modelSelect.value === 'GaussianTalker';
+            gtIterationsGroup.style.display = isGT ? 'block' : 'none';
+            gtConfigGroup.style.display = isGT ? 'block' : 'none';
+            gtAuGroup.style.display = isGT ? 'block' : 'none';
+        }
+
+        modelSelect.addEventListener('change', toggleGaussianTalkerOptions);
+        toggleGaussianTalkerOptions(); // 初始化
+
+        // 手动AU上传复选框控制文件输入框显示
+        useManualAuCheckbox.addEventListener('change', function () {
+            auCsvFileInput.style.display = this.checked ? 'block' : 'none';
+        });
+
         document.getElementById('trainForm').addEventListener('submit', function (e) {
             e.preventDefault();
             const formData = new FormData(this);
@@ -82,9 +125,14 @@
                 .then(data => {
                     if (data.status === 'success') {
                         alert('训练完成！');
+                    } else if (data.status === 'error') {
+                        alert('训练失败: ' + (data.message || '未知错误'));
                     }
                 })
-                .catch(err => console.error('错误:', err));
+                .catch(err => {
+                    console.error('错误:', err);
+                    alert('请求失败: ' + err.message);
+                });
         });
     </script>
 </body>

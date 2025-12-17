@@ -13,3 +13,4 @@ GPT-SoVITS/
 
 test_data/
 testtt/
+static/audios/*.wav

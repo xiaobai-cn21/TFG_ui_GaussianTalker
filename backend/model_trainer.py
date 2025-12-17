@@ -55,13 +55,18 @@ def train_model(data):
             cmd = [
                 "./GaussianTalker/run_gaussiantalker.sh", "train",
                 "--video_path", data['ref_video'],
-                "--gpu", data['gpu_choice'],
-                "--iterations", data['iterations']
+                "--gpu", data.get('gpu_choice', 'GPU0'),
+                "--iterations", data.get('iterations', '10000')
             ]
             
             # 如果提供了配置文件，添加config参数
             if 'config' in data and data['config']:
                 cmd.extend(["--config", data['config']])
+            
+            # 如果提供了AU CSV文件，添加au_csv参数
+            if 'au_csv' in data and data['au_csv'] and os.path.exists(data['au_csv']):
+                print(f"[backend.model_trainer] 使用用户提供的AU文件: {data['au_csv']}")
+                cmd.extend(["--au_csv", data['au_csv']])
             
             print(f"[backend.model_trainer] 执行命令: {' '.join(cmd)}")
             # 执行训练命令

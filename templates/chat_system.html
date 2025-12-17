@@ -425,10 +425,10 @@
 
                         // 刷新占位视频（可选）
                         if (data.video_path) {
-                            const videoEl = document.getElementById('chatVideo');
-                            const newSrc = data.video_path + '?t=' + new Date().getTime();
-                            videoEl.src = newSrc;
-                            videoEl.load();
+                        const videoEl = document.getElementById('chatVideo');
+                        const newSrc = data.video_path + '?t=' + new Date().getTime();
+                        videoEl.src = newSrc;
+                        videoEl.load();
                         }
 
                         const statusMessage = document.getElementById('statusMessage');

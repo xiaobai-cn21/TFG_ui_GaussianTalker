@@ -42,12 +42,18 @@ def video_generation():
             "model_name": request.form.get('model_name'),
             "model_param": request.form.get('model_param'),
             "ref_audio": request.form.get('ref_audio'),
-            "gpu_choice": request.form.get('gpu_choice'),
+            "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
             "target_text": request.form.get('target_text'),
+            # GaussianTalker专用参数
+            "batch_size": request.form.get('batch_size', '128'),
+            "iteration": request.form.get('iteration', '10000'),
         }
 
-        video_path = generate_video(data)
-        return jsonify({'status': 'success', 'video_path': video_path})
+        try:
+            video_path = generate_video(data)
+            return jsonify({'status': 'success', 'video_path': video_path})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
 
     return render_template('video_generation.html')
 
@@ -59,15 +65,31 @@ def model_training():
         data = {
             "model_choice": request.form.get('model_choice'),
             "ref_video": request.form.get('ref_video'),
-            "gpu_choice": request.form.get('gpu_choice'),
-            "epoch": request.form.get('epoch'),
-            "custom_params": request.form.get('custom_params')
+            "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
+            "epoch": request.form.get('epoch', '10'),
+            "custom_params": request.form.get('custom_params'),
+            # GaussianTalker专用参数
+            "iterations": request.form.get('iterations', '10000'),
+            "config": request.form.get('config', 'arguments/64_dim_1_transformer.py'),
         }
 
-        video_path = train_model(data)
-        video_path = "/" + video_path.replace("\\", "/")
+        # 处理AU文件上传（GaussianTalker）
+        au_csv_path = None
+        if 'au_csv' in request.files and request.files['au_csv']:
+            au_csv_file = request.files['au_csv']
+            if au_csv_file.filename != '':
+                # 保存到临时目录
+                os.makedirs('./temp', exist_ok=True)
+                au_csv_path = f'./temp/{au_csv_file.filename}'
+                au_csv_file.save(au_csv_path)
+                data['au_csv'] = au_csv_path
 
-        return jsonify({'status': 'success', 'video_path': video_path})
+        try:
+            video_path = train_model(data)
+            video_path = "/" + video_path.replace("\\", "/")
+            return jsonify({'status': 'success', 'video_path': video_path})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
 
     return render_template('model_training.html')
 

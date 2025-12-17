@@ -22,16 +22,17 @@
             <form id="videoForm">
                 <div class="form-group">
                     <label>模型名称</label>
-                    <select name="model_name">
+                    <select name="model_name" id="model_name_select">
                         <option value="model1">Model 1</option>
                         <option value="model2">Model 2</option>
                         <option value="SyncTalk">SyncTalk</option>
+                        <option value="GaussianTalker">GaussianTalker</option>
                     </select>
                 </div>
 
                 <div class="form-group">
                     <label>模型目录地址</label>
-                    <input type="text" name="model_param" placeholder="请输入模型目录路径">
+                    <input type="text" name="model_param" placeholder="请输入模型目录路径（如：obama）">
                 </div>
 
                 <div class="form-group">
@@ -47,6 +48,17 @@
                     </select>
                 </div>
 
+                <!-- GaussianTalker专用参数 -->
+                <div class="form-group" id="gt_batch_size_group" style="display: none;">
+                    <label>Batch Size (GaussianTalker)</label>
+                    <input type="number" name="batch_size" value="128" min="1" max="512">
+                </div>
+
+                <div class="form-group" id="gt_iteration_group" style="display: none;">
+                    <label>Iteration (GaussianTalker检查点)</label>
+                    <input type="number" name="iteration" value="10000" min="1000" step="1000">
+                </div>
+
                 <div class="form-group">
                     <label>目标文字（文本框）</label>
                     <textarea name="target_text" placeholder="留空则直接使用参考音频"></textarea>
@@ -58,6 +70,20 @@
     </div>
 
     <script>
+        // 根据模型选择显示/隐藏GaussianTalker专用参数
+        const modelSelect = document.getElementById('model_name_select');
+        const gtBatchSizeGroup = document.getElementById('gt_batch_size_group');
+        const gtIterationGroup = document.getElementById('gt_iteration_group');
+
+        function toggleGaussianTalkerOptions() {
+            const isGT = modelSelect.value === 'GaussianTalker';
+            gtBatchSizeGroup.style.display = isGT ? 'block' : 'none';
+            gtIterationGroup.style.display = isGT ? 'block' : 'none';
+        }
+
+        modelSelect.addEventListener('change', toggleGaussianTalkerOptions);
+        toggleGaussianTalkerOptions(); // 初始化
+
         document.getElementById('videoForm').addEventListener('submit', function (e) {
             e.preventDefault();
 
@@ -77,10 +103,13 @@
                         videoEl.load();
                         videoEl.play().catch(err => console.warn('自动播放被阻止:', err));
                     } else {
-                        alert('视频生成失败！');
+                        alert('视频生成失败: ' + (data.message || '未知错误'));
                     }
                 })
-                .catch(err => console.error('错误:', err));
+                .catch(err => {
+                    console.error('错误:', err);
+                    alert('请求失败: ' + err.message);
+                });
         });
 
     </script>

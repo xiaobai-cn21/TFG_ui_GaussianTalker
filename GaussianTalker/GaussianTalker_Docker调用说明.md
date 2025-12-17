@@ -1,24 +1,27 @@
 # GaussianTalker Docker 调用说明
 
-## 简介
-
-GaussianTalker是一个基于3D Gaussian Splatting的实时高保真说话人脸合成系统。本文档说明如何使用Docker容器化部署和运行GaussianTalker。
-
 ## 构建Docker镜像
 
 ```bash
 cd GaussianTalker
-./download_pretrained.sh
-# 按指引下载01_MorphableModel.mat到data_utils/face_tracking/3DMM/
-docker build -t gaussiantalker .
-```
+# 将Dockerfile.final重命名为Dockerfile
+cp Dockerfile.final Dockerfile
 
-**注意:** 构建过程可能需要较长时间（30分钟-1小时），因为需要编译CUDA扩展和安装PyTorch3D。
+# 将5个预训练模型文件放置到GaussianTalker/目录下：
+# - 01_MorphableModel.mat
+# - epoch_20.pth
+# - resnet50-19c8e357.pth
+# - shape_predictor_68_face_landmarks.dat
+# - s3fd-619a316812.pth
+
+# 构建Docker镜像（需要较长时间，约30-60分钟）
+docker build -t gaussiantalker:latest .
+```
 
 ## 打包Docker镜像
 
 ```bash
-docker save -o gaussiantalker.tar gaussiantalker
+docker save -o gaussiantalker.tar gaussiantalker:latest
 ```
 
 ## 从tar导入Docker镜像
@@ -38,22 +41,20 @@ docker load -i gaussiantalker.tar
 └── GaussianTalker/              # 自动创建的工作目录
     ├── data/                    # 数据目录
     │   └── {视频名称}/          # 预处理数据文件夹
-    │       ├── gt_imgs/         # Ground truth图像
-    │       ├── ori_imgs/        # 原始图像
-    │       ├── parsing/         # 人脸解析结果
-    │       ├── torso_imgs/      # 躯干图像
-    │       ├── au.csv           # 眼睛眨眼AU特征
-    │       ├── aud_ds.npy       # DeepSpeech音频特征
-    │       ├── aud.wav          # 音频文件
-    │       └── transforms_*.json # 相机变换参数
-    ├── output/                  # 模型输出目录
-    │   └── {视频名称}/          # 训练好的模型
-    │       ├── point_cloud/     # 点云数据
-    │       ├── cfg_args         # 配置参数
-    │       └── test/            # 测试结果
-    │           └── ours_{N}/    # 推理结果
-    │               └── renders/ # 渲染视频
-    └── audio/                   # 推理用音频文件目录
+    │       ├── {视频名称}.mp4   # 原始视频
+    │       ├── ori_imgs/        # 视频帧
+    │       ├── gt_imgs/         # 裁剪后的人脸图像
+    │       ├── parsing/         # 人脸分割
+    │       ├── aud.wav          # 提取的音频
+    │       ├── aud.npy          # DeepSpeech音频特征
+    │       ├── au.csv           # Action Unit特征
+    │       └── transforms_*.json # 3DMM参数
+    └── output/                  # 输出目录
+        └── {视频名称}/          # 训练好的模型
+            ├── point_cloud/     # 3D高斯点云
+            ├── checkpoints/     # 模型检查点
+            └── renders/         # 推理结果
+                └── output.mp4   # 生成的视频
 ```
 
 ## 脚本调用命令
@@ -64,68 +65,30 @@ docker load -i gaussiantalker.tar
 ./run_gaussiantalker.sh train \
     --video_path <视频文件路径> \
     --gpu <GPU设备> \
-    --iterations <训练迭代数> \
-    --config <配置文件>
+    --iterations <迭代次数> \
+    [--config <配置文件>] \
+    [--au_csv <AU文件>]
 ```
 
 **参数说明：**
 - `--video_path`: 输入视频文件路径（必需）
 - `--gpu`: GPU设备（默认: GPU0）
   - `GPU0`, `GPU1`, `GPU2`, ... - 指定GPU
-  - `CPU` - 使用CPU（不推荐，训练非常慢）
-- `--iterations`: 训练迭代数（默认: 10000）
-- `--config`: 配置文件路径（默认: arguments/64_dim_1_transformer.py）
+  - `CPU` - 使用CPU
+- `--iterations`: 训练迭代次数（默认: 10000）
+- `--config`: 配置文件路径（可选，默认: arguments/64_dim_1_transformer.py）
+- `--au_csv`: 手动提供的AU文件（可选，如果OpenFace封装失败）
 
 **示例：**
 ```bash
-./run_gaussiantalker.sh train \
-    --video_path ./my_video.mp4 \
-    --gpu GPU0 \
-    --iterations 10000 \
-    --config arguments/64_dim_1_transformer.py
-```
+# 基础训练
+./run_gaussiantalker.sh train --video_path ./obama.mp4 --gpu GPU0 --iterations 10000
 
-### preprocess_only - 仅数据预处理
+# 使用自定义配置
+./run_gaussiantalker.sh train --video_path ./obama.mp4 --gpu GPU0 --iterations 15000 --config arguments/64_dim_1_transformer.py
 
-```bash
-./run_gaussiantalker.sh preprocess_only \
-    --video_path <视频文件路径> \
-    --gpu <GPU设备>
-```
-
-**示例：**
-```bash
-./run_gaussiantalker.sh preprocess_only \
-    --video_path ./training_video.mp4 \
-    --gpu GPU0
-```
-
-**预处理步骤包括：**
-1. 人脸检测和关键点提取
-2. 人脸解析（segmentation）
-3. 3DMM参数拟合
-4. 音频特征提取（DeepSpeech）
-5. 生成训练用的transforms文件
-
-### train_only - 仅模型训练
-
-```bash
-./run_gaussiantalker.sh train_only \
-    --data_dir <数据目录名称> \
-    --gpu <GPU设备> \
-    --iterations <训练迭代数> \
-    --config <配置文件>
-```
-
-**注意：** 需要先运行预处理步骤生成数据
-
-**示例：**
-```bash
-./run_gaussiantalker.sh train_only \
-    --data_dir my_video \
-    --gpu GPU0 \
-    --iterations 10000 \
-    --config arguments/64_dim_1_transformer.py
+# 手动提供AU文件（如果OpenFace失败）
+./run_gaussiantalker.sh train --video_path ./obama.mp4 --gpu GPU0 --au_csv ./au.csv
 ```
 
 ### infer - 视频推理
@@ -135,170 +98,140 @@ docker load -i gaussiantalker.tar
     --model_dir <模型目录名称> \
     --audio_path <音频文件路径> \
     --gpu <GPU设备> \
-    --batch_size <批处理大小> \
-    --iteration <检查点迭代数>
+    [--batch_size <批大小>] \
+    [--iteration <检查点迭代次数>]
 ```
 
 **参数说明：**
-- `--model_dir`: 模型目录名称（与数据目录名称相同）
-- `--audio_path`: 驱动音频文件路径（支持.wav格式）
-- `--gpu`: GPU设备（默认: GPU0）
-- `--batch_size`: 批处理大小（默认: 128，根据显存调整）
-- `--iteration`: 使用的检查点迭代数（默认: 10000）
+- `--model_dir`: 模型目录名称（如：obama）
+- `--audio_path`: 驱动音频文件路径
+- `--gpu`: GPU设备
+- `--batch_size`: 批处理大小（可选，默认: 128）
+- `--iteration`: 使用的检查点迭代次数（可选，默认: 10000）
 
 **示例：**
 ```bash
+# 基础推理
 ./run_gaussiantalker.sh infer \
-    --model_dir my_video \
-    --audio_path ./speech.wav \
-    --gpu GPU0 \
-    --batch_size 128 \
-    --iteration 10000
-```
+    --model_dir obama \
+    --audio_path speech.wav \
+    --gpu GPU0
 
-**推理前准备：**
-1. 确保音频文件为.wav格式
-2. 需要提前提取音频的DeepSpeech特征（.npy文件）
-3. 音频文件和特征文件应放在数据目录中
+# 指定batch_size和iteration
+./run_gaussiantalker.sh infer \
+    --model_dir obama \
+    --audio_path speech.wav \
+    --gpu GPU0 \
+    --batch_size 256 \
+    --iteration 15000
+```
 
 ## 输出文件说明
 
 ### 训练完成后
 - **数据目录**: `GaussianTalker/data/{视频名称}/`
 - **模型目录**: `GaussianTalker/output/{视频名称}/`
-- **点云文件**: `GaussianTalker/output/{视频名称}/point_cloud/iteration_{N}/point_cloud.ply`
 
 ### 推理完成后
-- **输出视频**: `GaussianTalker/output/{视频名称}/custom/ours_{N}/renders/output.mp4`
-
-## 配置文件说明
-
-GaussianTalker提供两种主要配置：
-
-1. **64_dim_1_transformer.py** - 使用1层Transformer（推荐，速度快）
-2. **64_dim_2_transformer.py** - 使用2层Transformer（质量更高，速度稍慢）
-
-可以根据需求选择不同的配置文件。
+- **输出视频**: `GaussianTalker/output/{视频名称}/renders/output.mp4`
+  - 或: `GaussianTalker/output/{视频名称}/custom/ours_{iteration}/renders/output.mp4`
 
 ## 测试模式
 
-在不构建Docker镜像的情况下测试脚本逻辑：
+在不构建 Docker 镜像的情况下测试脚本逻辑：
 
 ```bash
 # 启用测试模式
-TEST_MODE=1 ./run_gaussiantalker.sh train \
-    --video_path ./test.mp4 \
-    --gpu GPU0 \
-    --iterations 1000
-
-TEST_MODE=1 ./run_gaussiantalker.sh infer \
-    --model_dir test \
-    --audio_path ./test.wav
+TEST_MODE=1 ./run_gaussiantalker.sh train --video_path ./test.mp4 --gpu GPU0 --iterations 10000
+TEST_MODE=1 ./run_gaussiantalker.sh infer --model_dir test --audio_path ./test.wav
 ```
+
+**示例：**
+```
+GaussianTalker/data/obama/
+GaussianTalker/output/obama/
+GaussianTalker/output/obama/renders/output.mp4
+```
+
+## 前后端集成说明
+
+### 前端界面
+
+1. **模型训练页面** (`model_training.html`):
+   - 选择模型: `GaussianTalker`
+   - 输入参数: 视频路径、GPU、迭代次数、配置文件
+   - 可选: 手动上传AU文件
+
+2. **视频生成页面** (`video_generation.html`):
+   - 选择模型: `GaussianTalker`
+   - 输入参数: 模型目录、音频路径、GPU、Batch Size、Iteration
+
+3. **实时对话页面** (`chat_system.html`):
+   - 选择模型: `GaussianTalker`
+   - 自动调用: ASR -> LLM -> TTS -> GaussianTalker视频生成
+
+### 后端逻辑
+
+- **`app.py`**: 处理HTTP请求和文件上传
+- **`backend/model_trainer.py`**: 调用 `run_gaussiantalker.sh train`
+- **`backend/video_generator.py`**: 调用 `run_gaussiantalker.sh infer`
+- **`backend/chat_engine.py`**: 整合ASR、LLM、TTS、GaussianTalker完整流程
+
+### 工作流程
+
+**训练:**
+1. 用户在前端选择GaussianTalker并上传视频
+2. 后端接收请求 -> `model_trainer.py`
+3. 调用 `run_gaussiantalker.sh train`
+4. Docker容器内执行预处理和训练
+5. 训练完成，模型保存到 `GaussianTalker/output/`
+
+**推理:**
+1. 用户在前端选择模型和上传音频
+2. 后端接收请求 -> `video_generator.py`
+3. 调用 `run_gaussiantalker.sh infer`
+4. Docker容器内提取DeepSpeech特征并推理
+5. 生成视频复制到 `static/videos/` 供前端显示
+
+**实时对话:**
+1. 用户录音 -> ASR识别文本
+2. LLM生成回复文本
+3. TTS合成语音（支持语音克隆）
+4. GaussianTalker生成数字人视频
+5. 前端同时播放音频和视频
 
 ## 注意事项
 
-### 系统要求
-- **GPU**: NVIDIA GPU with CUDA 11.3+（推荐RTX 3090或更高）
-- **显存**: 至少12GB VRAM（24GB推荐）
-- **内存**: 至少16GB RAM
-- **存储**: 每个训练项目约需5-10GB空间
+1. **首次使用**需要先构建 Docker 镜像（时间较长）
+2. **预训练模型**必须放置在正确位置（详见构建说明）
+3. **OpenFace集成**: 如果封装失败，用户可手动上传AU文件绕过
+4. **视频格式**: 建议使用常见格式（mp4, avi）
+5. **音频格式**: 支持 wav, mp3 等常见格式
+6. **GPU要求**: 推荐使用NVIDIA GPU with CUDA 11.7+
 
-### 训练建议
-1. **视频要求**：
-   - 分辨率: 至少720p，推荐1080p
-   - 时长: 3-5分钟（足够学习人脸特征）
-   - 内容: 单人正面说话视频，光照稳定
-   - 格式: mp4, avi, mov等常见格式
+## 性能参考
 
-2. **训练参数**：
-   - 迭代数10000次通常足够（约1-2小时）
-   - 可以根据中间结果调整迭代数
-   - 使用较小的batch_size如果显存不足
+- **训练时间**: 10K iterations约需30-60分钟（取决于视频长度和GPU性能）
+- **推理时间**: 约10-30秒/10秒音频（batch_size=128）
+- **显存需求**: 至少8GB（推荐12GB+）
+- **评估指标**: PSNR 30+, SSIM 0.90+（良好训练）
 
-3. **音频处理**：
-   - 音频采样率: 16kHz推荐
-   - 格式: .wav（未压缩）
-   - 需要提前提取DeepSpeech特征
+## 故障排除
 
-### 常见问题
+### 问题1: OpenFace提取AU失败
+**解决方案**: 在前端勾选"手动上传AU文件"，提供预先提取的au.csv
 
-**Q: 预处理时提示找不到人脸？**
-A: 确保视频中人脸清晰可见，光照充足。可以尝试提高视频分辨率。
+### 问题2: 推理时找不到输出视频
+**检查**:
+- 模型是否训练完成
+- 检查点文件是否存在（`output/{model_name}/checkpoints/`）
+- 检查日志输出中的错误信息
 
-**Q: 训练过程中显存溢出？**
-A: 减小batch_size或使用更大的GPU。
+### 问题3: 训练过程中断
+**解决方案**: GaussianTalker支持从检查点恢复，重新运行train命令即可
 
-**Q: 推理时提示找不到检查点文件？**
-A: 确保训练已完成，检查`output/{model_name}/point_cloud/`目录中是否有对应迭代数的检查点。
-
-**Q: 如何提取DeepSpeech特征？**
-A: 使用`data_utils/deepspeech_features/extract_ds_features.py`脚本提取音频特征。
-
-## 完整工作流程示例
-
-```bash
-# 1. 准备训练视频
-# 视频应为3-5分钟的单人说话视频
-
-# 2. 完整训练（预处理+训练）
-./run_gaussiantalker.sh train \
-    --video_path ./obama.mp4 \
-    --gpu GPU0 \
-    --iterations 10000
-
-# 3. 等待训练完成（约1-2小时）
-
-# 4. 准备推理音频
-# 将音频文件复制到数据目录，并提取特征
-
-# 5. 执行推理
-./run_gaussiantalker.sh infer \
-    --model_dir obama \
-    --audio_path ./speech.wav \
-    --gpu GPU0 \
-    --batch_size 128
-
-# 6. 查看结果视频
-# 输出在: GaussianTalker/output/obama/custom/ours_10000/renders/output.mp4
-```
-
-## 性能优化
-
-1. **训练优化**：
-   - 使用更强大的GPU（如A100, RTX 4090）
-   - 启用混合精度训练（需修改配置）
-   - 使用多GPU并行训练（需修改脚本）
-
-2. **推理优化**：
-   - 增大batch_size利用GPU并行能力
-   - 减少渲染分辨率（如果不需要高分辨率）
-
-3. **存储优化**：
-   - 定期清理中间训练结果
-   - 压缩完成的模型文件
-
-## 技术支持
-
-如遇到问题，请检查：
-1. Docker日志: `docker logs <container_id>`
-2. 模型训练日志: `GaussianTalker/output/{model_name}/`
-3. 系统资源使用: `nvidia-smi`
-
-## 引用
-
-如果使用GaussianTalker，请引用原论文：
-```
-@inproceedings{cho2024gaussiantalker,
-  title={Gaussiantalker: Real-time talking head synthesis with 3d gaussian splatting},
-  author={Cho, Kyusun and Lee, Joungbin and Yoon, Heeji and Hong, Yeobin and Ko, Jaehoon and Ahn, Sangjun and Kim, Seungryong},
-  booktitle={Proceedings of the 32nd ACM International Conference on Multimedia},
-  pages={10985--10994},
-  year={2024}
-}
-```
-
-## 许可证
-
-GaussianTalker采用非商业研究许可证。详见LICENSE.md。
-
+### 问题4: Docker镜像构建失败
+**检查**:
+- 预训练模型是否都已放置
+- 网络连接是否正常（需下载依赖包）
+- 磁盘空间是否充足（至少20GB+）
