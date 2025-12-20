@@ -200,6 +200,13 @@
                     <span>正在录音...</span>
                 </div>
                 <div class="status-message" id="statusMessage">准备录音</div>
+                
+                <!-- 文件上传备选 -->
+                <div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 6px;">
+                    <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #666;">或上传音频文件：</label>
+                    <input type="file" id="uploadAudioFile" accept="audio/*" style="font-size: 14px;">
+                    <small style="display: block; margin-top: 5px; color: #888;">支持拖拽音频到上传框</small>
+                </div>
             </div>
             <!-- 左侧视频显示 -->
             <video id="chatVideo" controls width="420">
@@ -398,10 +405,80 @@
             }
         });
         
-        document.getElementById('chatForm').addEventListener('submit', function (e) {
+        // 文件拖拽支持
+        const uploadAudioFileInput = document.getElementById('uploadAudioFile');
+        if (uploadAudioFileInput) {
+            uploadAudioFileInput.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.border = '2px dashed #4CAF50';
+            });
+            
+            uploadAudioFileInput.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.border = '';
+            });
+            
+            uploadAudioFileInput.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.border = '';
+                if (e.dataTransfer.files.length > 0) {
+                    this.files = e.dataTransfer.files;
+                }
+            });
+        }
+
+        document.getElementById('chatForm').addEventListener('submit', async function (e) {
             e.preventDefault();
             const formData = new FormData(this);
+            const statusMessage = document.getElementById('statusMessage');
 
+            // 检查是否上传了音频文件（备选方案）
+            const uploadedAudioFile = uploadAudioFileInput ? uploadAudioFileInput.files[0] : null;
+            
+            if (uploadedAudioFile) {
+                // 如果上传了音频文件，先上传到服务器
+                if (statusMessage) statusMessage.textContent = '正在上传音频文件...';
+                
+                try {
+                    const uploadFormData = new FormData();
+                    uploadFormData.append('file', uploadedAudioFile);
+                    uploadFormData.append('type', 'audio');
+                    
+                    const uploadRes = await fetch('/upload_file', {
+                        method: 'POST',
+                        body: uploadFormData
+                    });
+                    
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.status === 'success') {
+                        // 将上传的音频文件路径复制到input.wav位置
+                        const copyRes = await fetch('/copy_uploaded_audio', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({uploaded_path: uploadData.file_path})
+                        });
+                        
+                        const copyData = await copyRes.json();
+                        if (copyData.status !== 'success') {
+                            alert('音频文件处理失败');
+                            return;
+                        }
+                        console.log('上传音频已处理:', uploadData.file_path);
+                    } else {
+                        alert('音频上传失败: ' + uploadData.message);
+                        return;
+                    }
+                } catch (err) {
+                    alert('音频上传失败: ' + err.message);
+                    return;
+                }
+            }
+
+            if (statusMessage) statusMessage.textContent = '正在处理对话...';
+            
             fetch('/chat_system', {
                 method: 'POST',
                 body: formData
@@ -423,7 +500,7 @@
                             ttsEl.play().catch(() => {});
                         }
 
-                        // 刷新占位视频（可选）
+                        // 刷新数字人视频
                         if (data.video_path) {
                         const videoEl = document.getElementById('chatVideo');
                         const newSrc = data.video_path + '?t=' + new Date().getTime();
@@ -431,11 +508,17 @@
                         videoEl.load();
                         }
 
-                        const statusMessage = document.getElementById('statusMessage');
                         if (statusMessage) statusMessage.textContent = '对话完成';
+                    } else {
+                        if (statusMessage) statusMessage.textContent = '对话失败';
+                        alert('对话失败: ' + (data.message || '未知错误'));
                     }
                 })
-                .catch(err => console.error('错误:', err));
+                .catch(err => {
+                    console.error('错误:', err);
+                    if (statusMessage) statusMessage.textContent = '对话失败';
+                    alert('请求失败: ' + err.message);
+                });
         });
     </script>
 </body>

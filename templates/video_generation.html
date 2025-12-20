@@ -36,8 +36,10 @@
                 </div>
 
                 <div class="form-group">
-                    <label>参考音频地址</label>
-                    <input type="text" name="ref_audio" placeholder="请输入音频路径">
+                    <label>参考音频上传</label>
+                    <input type="file" name="ref_audio_file" id="ref_audio_file" accept="audio/*" style="margin-bottom: 10px;">
+                    <input type="text" name="ref_audio" id="ref_audio_path" placeholder="或输入音频路径">
+                    <small style="color: #666;">支持拖拽文件到上传框</small>
                 </div>
                 
                 <div class="form-group">
@@ -84,11 +86,66 @@
         modelSelect.addEventListener('change', toggleGaussianTalkerOptions);
         toggleGaussianTalkerOptions(); // 初始化
 
-        document.getElementById('videoForm').addEventListener('submit', function (e) {
+        // 文件拖拽支持
+        const refAudioFileInput = document.getElementById('ref_audio_file');
+        refAudioFileInput.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '2px dashed #4CAF50';
+        });
+        
+        refAudioFileInput.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '';
+        });
+        
+        refAudioFileInput.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '';
+            if (e.dataTransfer.files.length > 0) {
+                this.files = e.dataTransfer.files;
+            }
+        });
+
+        document.getElementById('videoForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
             const formData = new FormData(this);
+            
+            // 如果上传了文件，先上传音频到服务器
+            const audioFile = formData.get('ref_audio_file');
+            let audioPath = formData.get('ref_audio');
+            
+            if (audioFile && audioFile.size > 0) {
+                alert('正在上传音频文件，请稍候...');
+                try {
+                    const uploadFormData = new FormData();
+                    uploadFormData.append('file', audioFile);
+                    uploadFormData.append('type', 'audio');
+                    
+                    const uploadRes = await fetch('/upload_file', {
+                        method: 'POST',
+                        body: uploadFormData
+                    });
+                    
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.status === 'success') {
+                        audioPath = uploadData.file_path;
+                        formData.set('ref_audio', audioPath);
+                        console.log('音频上传成功:', audioPath);
+                    } else {
+                        alert('音频上传失败: ' + uploadData.message);
+                        return;
+                    }
+                } catch (err) {
+                    alert('音频上传失败: ' + err.message);
+                    return;
+                }
+            }
 
+            alert('开始生成视频，请稍候...');
             fetch('/video_generation', {
                 method: 'POST',
                 body: formData
@@ -102,6 +159,7 @@
                         videoEl.src = newSrc;
                         videoEl.load();
                         videoEl.play().catch(err => console.warn('自动播放被阻止:', err));
+                        alert('视频生成完成！');
                     } else {
                         alert('视频生成失败: ' + (data.message || '未知错误'));
                     }

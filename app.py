@@ -190,6 +190,80 @@ def save_audio():
     return jsonify({'status': 'success', 'message': '音频保存成功'})
 
 
+@app.route('/upload_file', methods=['POST'])
+def upload_file():
+    """通用文件上传接口"""
+    if 'file' not in request.files:
+        return jsonify({'status': 'error', 'message': '没有文件'})
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'status': 'error', 'message': '没有选择文件'})
+    
+    file_type = request.form.get('type', 'unknown')
+    
+    # 直接使用现有的static目录
+    if file_type == 'video':
+        save_dir = './static/videos'
+    elif file_type == 'audio':
+        save_dir = './static/audios'
+    else:
+        save_dir = './static'
+    
+    # 生成唯一文件名（保留原始扩展名）
+    from werkzeug.utils import secure_filename
+    
+    original_filename = secure_filename(file.filename)
+    filename_parts = original_filename.rsplit('.', 1)
+    if len(filename_parts) == 2:
+        unique_filename = f"{filename_parts[0]}_{uuid.uuid4().hex[:8]}.{filename_parts[1]}"
+    else:
+        unique_filename = f"{original_filename}_{uuid.uuid4().hex[:8]}"
+    
+    file_path = os.path.join(save_dir, unique_filename)
+    
+    try:
+        file.save(file_path)
+        return jsonify({
+            'status': 'success',
+            'message': '文件上传成功',
+            'file_path': file_path,
+            'filename': unique_filename
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'文件保存失败: {str(e)}'
+        }), 500
+
+
+@app.route('/copy_uploaded_audio', methods=['POST'])
+def copy_uploaded_audio():
+    """复制上传的音频文件到input.wav（用于实时对话）"""
+    import shutil
+    
+    data = request.get_json()
+    uploaded_path = data.get('uploaded_path')
+    
+    if not uploaded_path or not os.path.exists(uploaded_path):
+        return jsonify({'status': 'error', 'message': '上传文件不存在'})
+    
+    try:
+        target_path = './static/audios/input.wav'
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        shutil.copy(uploaded_path, target_path)
+        
+        return jsonify({
+            'status': 'success',
+            'message': '音频文件已准备完毕'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'文件处理失败: {str(e)}'
+        }), 500
+
+
 if __name__ == '__main__':
     # 关闭 reloader 以规避 watchdog 与 werkzeug 的不兼容导致的导入错误
     app.run(debug=True, port=5001, use_reloader=False)

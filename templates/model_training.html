@@ -31,8 +31,10 @@
                 </div>
 
                 <div class="form-group">
-                    <label>参考视频/图像地址</label>
-                    <input type="text" name="ref_video" placeholder="请输入参考视频或图像的相对路径">
+                    <label>参考视频/图像上传</label>
+                    <input type="file" name="ref_video_file" id="ref_video_file" accept="video/*,image/*" style="margin-bottom: 10px;">
+                    <input type="text" name="ref_video" id="ref_video_path" placeholder="或输入文件路径">
+                    <small style="color: #666;">支持拖拽文件到上传框</small>
                 </div>
 
                 <div class="form-group">
@@ -101,22 +103,75 @@
             auCsvFileInput.style.display = this.checked ? 'block' : 'none';
         });
 
-        document.getElementById('trainForm').addEventListener('submit', function (e) {
+        // 文件拖拽支持
+        const refVideoFileInput = document.getElementById('ref_video_file');
+        refVideoFileInput.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '2px dashed #4CAF50';
+        });
+        
+        refVideoFileInput.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '';
+        });
+        
+        refVideoFileInput.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '';
+            if (e.dataTransfer.files.length > 0) {
+                this.files = e.dataTransfer.files;
+            }
+        });
+
+        document.getElementById('trainForm').addEventListener('submit', async function (e) {
             e.preventDefault();
             const formData = new FormData(this);
 
-            // 立即从表单获取视频路径并播放
-            const refVideoPath = formData.get('ref_video');
-            const videoEl = document.getElementById('trainVideo');
+            // 如果上传了文件，先上传文件到服务器
+            const videoFile = formData.get('ref_video_file');
+            let videoPath = formData.get('ref_video');
+            
+            if (videoFile && videoFile.size > 0) {
+                alert('正在上传视频文件，请稍候...');
+                try {
+                    const uploadFormData = new FormData();
+                    uploadFormData.append('file', videoFile);
+                    uploadFormData.append('type', 'video');
+                    
+                    const uploadRes = await fetch('/upload_file', {
+                        method: 'POST',
+                        body: uploadFormData
+                    });
+                    
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.status === 'success') {
+                        videoPath = uploadData.file_path;
+                        formData.set('ref_video', videoPath);
+                        console.log('视频上传成功:', videoPath);
+                    } else {
+                        alert('视频上传失败: ' + uploadData.message);
+                        return;
+                    }
+                } catch (err) {
+                    alert('视频上传失败: ' + err.message);
+                    return;
+                }
+            }
 
-            if (refVideoPath) {
-                // 立即设置视频源并播放
-                const newSrc = "/" + refVideoPath.replace("\\", "/") + '?t=' + new Date().getTime();
+            // 立即播放上传的视频
+            const videoEl = document.getElementById('trainVideo');
+            if (videoPath) {
+                const newSrc = "/" + videoPath.replace("\\", "/") + '?t=' + new Date().getTime();
                 videoEl.src = newSrc;
                 videoEl.load();
                 videoEl.play().catch(e => console.log('自动播放可能被阻止:', e));
             }
 
+            // 提交训练请求
+            alert('开始训练，这可能需要较长时间...');
             fetch('/model_training', {
                 method: 'POST',
                 body: formData
