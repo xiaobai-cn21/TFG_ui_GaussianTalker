@@ -152,28 +152,44 @@ train() {
     # 获取GaussianTalker目录的绝对路径
     local gt_abs=$(realpath "$GT_DIR")
     
-    # Step 1: 视频预处理（提取帧、音频、3DMM、DeepSpeech、AU）
+    # Step 1: 视频预处理（提取帧、音频、3DMM、DeepSpeech等）
     echo ""
-    echo "===== 步骤1: 视频预处理 ====="
+    echo "===== 步骤1: 数据预处理 (process.py) ====="
     mock_docker run --rm $gpu_param \
         -v "$gt_abs/data:$WORKSPACE/data" \
         $IMAGE_NAME \
         python data_utils/process.py \
-        --video_path "$WORKSPACE/data/${video_name}/$(basename "$video_path")" \
-        --data_dir "$WORKSPACE/data/${video_name}" \
-        $skip_au
+        "$WORKSPACE/data/${video_name}/$(basename "$video_path")"
+    
+    # Step 1.5: 提取AU特征（如果未提供au.csv）
+    if [ -z "$skip_au" ]; then
+        echo ""
+        echo "===== 步骤1.5: 提取AU特征 (OpenFace) ====="
+        echo "注意：这一步调用OpenFace，如果失败请手动提供au.csv"
+        # OpenFace FeatureExtraction命令
+        mock_docker run --rm $gpu_param \
+            -v "$gt_abs/data:$WORKSPACE/data" \
+            $IMAGE_NAME \
+            bash -c "cd $WORKSPACE/data/${video_name} && FeatureExtraction -f $(basename "$video_path") -out_dir . && mv $(basename "$video_path" .mp4).csv au.csv"
+        
+        # 检查au.csv是否生成成功
+        if [ ! -f "$data_dir/au.csv" ]; then
+            echo "警告: OpenFace未能生成au.csv，训练可能受影响"
+            echo "建议手动运行OpenFace或在前端上传预先提取的au.csv"
+        fi
+    fi
     
     # Step 2: 模型训练
     echo ""
-    echo "===== 步骤2: 模型训练 ====="
+    echo "===== 步骤2: 模型训练 (train.py) ====="
     mock_docker run --rm $gpu_param \
         -v "$gt_abs/data:$WORKSPACE/data" \
         -v "$gt_abs/output:$WORKSPACE/output" \
         $IMAGE_NAME \
         python train.py \
-        --config "$config" \
         -s "$WORKSPACE/data/${video_name}" \
-        -m "$WORKSPACE/output/${video_name}" \
+        --model_path "$WORKSPACE/output/${video_name}" \
+        --configs "$config" \
         --iterations $iterations
     
     echo ""
@@ -277,7 +293,7 @@ infer() {
     
     # Step 1: 提取DeepSpeech特征
     echo ""
-    echo "===== 步骤1: 提取DeepSpeech特征 ====="
+    echo "===== 步骤1: 提取音频DeepSpeech特征 ====="
     local gt_abs=$(realpath "$GT_DIR")
     
     mock_docker run --rm $gpu_param \
@@ -287,19 +303,23 @@ infer() {
         "$WORKSPACE/data/${model_name}/$(basename "$audio_path")" \
         "$WORKSPACE/data/${model_name}/${audio_name}.npy"
     
-    # Step 2: 推理生成视频
+    # Step 2: 推理生成视频（使用render.py）
     echo ""
-    echo "===== 步骤2: 生成视频 ====="
+    echo "===== 步骤2: 推理生成数字人视频 (render.py) ====="
     mock_docker run --rm $gpu_param \
         -v "$gt_abs/data:$WORKSPACE/data" \
         -v "$gt_abs/output:$WORKSPACE/output" \
         $IMAGE_NAME \
-        python test.py \
+        python render.py \
         -s "$WORKSPACE/data/${model_name}" \
-        -m "$WORKSPACE/output/${model_name}" \
+        --model_path "$WORKSPACE/output/${model_name}" \
+        --configs arguments/64_dim_1_transformer.py \
         --iteration $iteration \
-        --batch_size $batch_size \
-        --audio_path "$WORKSPACE/data/${model_name}/$(basename "$audio_path")"
+        --batch $batch_size \
+        --custom_aud "${audio_name}.npy" \
+        --custom_wav "$(basename "$audio_path")" \
+        --skip_train \
+        --skip_test
     
     # 查找生成的视频
     local output_video=""
@@ -324,11 +344,79 @@ infer() {
     fi
 }
 
+# 评估函数
+evaluate() {
+    local generated_video=""
+    local data_dir=""
+    local output_json=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --generated_video)
+                generated_video="$2"
+                shift 2
+                ;;
+            --data_dir)
+                data_dir="$2"
+                shift 2
+                ;;
+            --output_json)
+                output_json="$2"
+                shift 2
+                ;;
+            *)
+                echo "未知参数: $1"
+                usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    if [ -z "$generated_video" ]; then
+        echo "错误: 必须指定生成视频路径(--generated_video)"
+        usage
+        exit 1
+    fi
+    
+    if [ -z "$data_dir" ]; then
+        echo "错误: 必须指定数据目录(--data_dir)"
+        usage
+        exit 1
+    fi
+    
+    # 确保目录结构
+    ensure_gt_dirs
+    
+    echo "GaussianTalker开始评估..."
+    echo "  - 生成视频: $generated_video"
+    echo "  - 数据目录: $data_dir"
+    
+    # 获取GaussianTalker目录的绝对路径
+    local gt_abs=$(realpath "$GT_DIR")
+    
+    # 构建评估命令
+    local eval_cmd="python evaluate.py --generated_video \"$generated_video\" --data_dir \"$data_dir\""
+    
+    if [ -n "$output_json" ]; then
+        eval_cmd="$eval_cmd --output_json \"$output_json\""
+    fi
+    
+    # 执行评估
+    mock_docker run --rm \
+        -v "$gt_abs:$WORKSPACE" \
+        $IMAGE_NAME \
+        bash -c "$eval_cmd"
+    
+    echo ""
+    echo "评估完成!"
+}
+
 usage() {
     echo "用法: $0 <任务类型> [参数]"
     echo "可用任务:"
     echo "  train        - 完整训练流程（预处理+训练）"
     echo "  infer        - 推理生成视频"
+    echo "  evaluate     - 评估生成视频质量（PSNR/SSIM）"
     echo ""
     echo "训练示例:"
     echo "  $0 train --video_path ./video.mp4 --gpu GPU0 --iterations 10000"
@@ -338,6 +426,10 @@ usage() {
     echo "推理示例:"
     echo "  $0 infer --model_dir obama --audio_path speech.wav --gpu GPU0"
     echo "  $0 infer --model_dir obama --audio_path speech.wav --gpu GPU0 --batch_size 256 --iteration 15000"
+    echo ""
+    echo "评估示例:"
+    echo "  $0 evaluate --generated_video ./GaussianTalker/output/obama/renders/output.mp4 --data_dir ./GaussianTalker/data/obama"
+    echo "  $0 evaluate --generated_video ./output.mp4 --data_dir ./data/obama --output_json results.json"
 }
 
 # 主函数
@@ -355,6 +447,10 @@ main() {
         "infer")
             shift
             infer "$@"
+            ;;
+        "evaluate")
+            shift
+            evaluate "$@"
             ;;
         "-h"|"--help")
             usage

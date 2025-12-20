@@ -126,6 +126,38 @@ docker load -i gaussiantalker.tar
     --iteration 15000
 ```
 
+### evaluate - 评估视频质量
+
+```bash
+./run_gaussiantalker.sh evaluate \
+    --generated_video <生成视频路径> \
+    --data_dir <数据目录> \
+    [--output_json <输出JSON文件>]
+```
+
+**参数说明：**
+- `--generated_video`: 生成的视频路径（必需）
+- `--data_dir`: 训练数据目录，包含transforms_val.json和gt_imgs/（必需）
+- `--output_json`: 输出结果的JSON文件路径（可选）
+
+**评估指标：**
+- **PSNR** (Peak Signal-to-Noise Ratio): 峰值信噪比，越高越好（30+ dB为良好）
+- **SSIM** (Structural Similarity Index): 结构相似性，范围0-1，越高越好（0.90+为良好）
+
+**示例：**
+```bash
+# 基础评估
+./run_gaussiantalker.sh evaluate \
+    --generated_video ./GaussianTalker/output/obama/renders/output.mp4 \
+    --data_dir ./GaussianTalker/data/obama
+
+# 保存评估结果到JSON
+./run_gaussiantalker.sh evaluate \
+    --generated_video ./GaussianTalker/output/obama/renders/output.mp4 \
+    --data_dir ./GaussianTalker/data/obama \
+    --output_json evaluation_results.json
+```
+
 ## 输出文件说明
 
 ### 训练完成后
