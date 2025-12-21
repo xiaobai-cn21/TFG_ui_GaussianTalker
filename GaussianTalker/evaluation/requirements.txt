@@ -1,0 +1,29 @@
+# =================================================================
+# GaussianTalker 评估指标依赖
+# 支持: NIQE, PSNR, FID, SSIM, LSE-C, LSE-D
+# =================================================================
+
+# 基础依赖
+torch==2.0.1
+torchvision==0.15.2
+numpy==1.24.3
+opencv-python-headless==4.8.0.74
+tqdm==4.65.0
+
+# 音频处理 (用于 LSE-C/LSE-D)
+librosa==0.10.0
+soundfile==0.12.1
+
+# 图像质量评估 (PSNR, SSIM)
+scikit-image==0.21.0
+scipy==1.10.1
+
+# 感知相似度 (LPIPS)
+lpips==0.1.4
+
+# 无参考图像质量评估 (NIQE)
+pyiqa==0.1.7
+
+# 工具库
+Pillow==9.5.0
+

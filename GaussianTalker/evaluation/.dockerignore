@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# 数据文件
+*.mp4
+*.mov
+*.avi
+*.wav
+*.mp3
+
+# 模型文件
+*.pth
+*.ckpt
+*.pt
+
+# 日志
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# 文档
+*.md
+
+# 脚本
+*.bat
+*.sh
+
