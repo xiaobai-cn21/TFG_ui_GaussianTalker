@@ -103,20 +103,22 @@
         }
 
         .record-btn {
-            padding: 12px 24px;
+            padding: 15px 30px;
             background-color: #e74c3c;
             color: white;
             border: none;
             border-radius: 50px;
-            font-size: 16px;
+            font-size: 18px;
+            font-weight: bold;
             cursor: pointer;
             transition: all 0.3s;
             margin-bottom: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
             margin: 0 auto 15px;
+            min-width: 200px;
         }
 
         .record-btn:hover {
@@ -125,12 +127,54 @@
         }
 
         .record-btn.recording {
-            background-color: #2ecc71;
+            background-color: #27ae60;
             animation: pulse 1.5s infinite;
         }
 
         .record-btn.recording:hover {
-            background-color: #27ae60;
+            background-color: #229954;
+        }
+
+        .upload-btn {
+            padding: 12px 24px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .upload-btn:hover {
+            background-color: #2980b9;
+            transform: scale(1.05);
+        }
+
+        .divider {
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: #999;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .divider span {
+            padding: 0 10px;
+            font-size: 14px;
         }
 
         @keyframes pulse {
@@ -191,21 +235,31 @@
         <div class="video-display">
             <!-- 语音录制器 -->
             <div class="voice-recorder">
+                <h3 style="margin-bottom: 20px; color: #2c3e50;">📢 开始对话</h3>
+                
+                <!-- 录音按钮 -->
                 <button id="recordButton" class="record-btn">
-                    <span>●</span> 开始录音
+                    <span>🎙️</span> 点击开始录音
                 </button>
                 <div class="timer" id="timer">00:00</div>
                 <div class="recording-indicator" id="recordingIndicator" style="display: none;">
                     <div class="recording-dot"></div>
                     <span>正在录音...</span>
                 </div>
-                <div class="status-message" id="statusMessage">准备录音</div>
+                <div class="status-message" id="statusMessage">点击按钮开始录音，再次点击结束并自动处理</div>
                 
-                <!-- 文件上传备选 -->
-                <div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 6px;">
-                    <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #666;">或上传音频文件：</label>
-                    <input type="file" id="uploadAudioFile" accept="audio/*" style="font-size: 14px;">
-                    <small style="display: block; margin-top: 5px; color: #888;">支持拖拽音频到上传框</small>
+                <!-- 分隔线 -->
+                <div class="divider">
+                    <span>或</span>
+                </div>
+                
+                <!-- 文件上传 -->
+                <input type="file" id="uploadAudioFile" accept="audio/*" style="display: none;">
+                <button id="uploadButton" class="upload-btn">
+                    <span>📁</span> 上传音频文件
+                </button>
+                <div style="margin-top: 10px; font-size: 12px; color: #888;">
+                    支持 mp3、wav、m4a 等格式
                 </div>
             </div>
             <!-- 左侧视频显示 -->
@@ -237,22 +291,32 @@
                 </div>
 
                 <div class="form-group">
-                    <label>语音克隆模型名称</label>
-                    <select name="voice_clone">
-                        <option value="off">关闭（不使用克隆）</option>
-                        <option value="use_input">使用当前录音</option>
-                        <option value="cloneA">预设音色 A</option>
-                        <option value="cloneB">预设音色 B</option>
-                    </select>
+                    <label>语音克隆参考音频（可选）</label>
+                    <input type="file" name="ref_audio_file" id="ref_audio_file" accept="audio/*" style="margin-bottom: 10px;">
+                    <input type="text" name="ref_audio" id="ref_audio_path" placeholder="或输入音频路径">
+                    <small style="color: #666;">上传参考音频以克隆数字人的声音，不上传则使用默认TTS音色（支持拖拽）</small>
                 </div>
 
                 <div class="form-group">
                     <label>GPU选择</label>
-                    <select name="gpu_choice">
+                    <select name="gpu_choice" id="gpu_choice_select_chat">
                         <option value="GPU0">GPU 0</option>
                         <option value="GPU1">GPU 1</option>
                         <option value="CPU">CPU</option>
+                        <option value="cloud">Cloud (AutoDL)</option>
                     </select>
+                </div>
+
+                <!-- 云端SSH配置 -->
+                <div id="cloud_config_group_chat" style="display: none;">
+                    <div class="form-group">
+                        <label>SSH端口号</label>
+                        <input type="number" name="ssh_port" value="40258">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH密码</label>
+                        <input type="password" name="ssh_password" value="83WncIL5CoYB">
+                    </div>
                 </div>
 
                 <div class="form-group" id="chatBatchSizeGroup" style="display:none;">
@@ -273,17 +337,22 @@
                     </select>
                 </div>
 
-                <button type="submit" class="generate-btn">🎤 开始对话</button>
+                <button type="submit" class="generate-btn" style="display:none;" id="manualStartBtn">⚙️ 手动触发对话</button>
+                <div style="padding: 12px; background: #e8f5e9; border-radius: 4px; font-size: 14px; color: #2e7d32; text-align: center;">
+                    <strong>💡 提示：</strong>左侧录音或上传音频后将自动开始对话
+                </div>
             </form>
         </div>
     </div>
 
     <script>
-        // 控制GaussianTalker字段的显示/隐藏
+        // 控制GaussianTalker字段和云端配置的显示/隐藏
         document.addEventListener('DOMContentLoaded', function() {
             const modelSelect = document.getElementById('chatModelName');
+            const gpuChoiceSelectChat = document.getElementById('gpu_choice_select_chat');
             const batchSizeGroup = document.getElementById('chatBatchSizeGroup');
             const iterationGroup = document.getElementById('chatIterationGroup');
+            const cloudConfigGroupChat = document.getElementById('cloud_config_group_chat');
             
             function toggleGaussianTalkerFields() {
                 const selectedModel = modelSelect.value;
@@ -296,8 +365,39 @@
                 }
             }
             
+            function toggleCloudConfigChat() {
+                const isCloud = gpuChoiceSelectChat.value === 'cloud';
+                cloudConfigGroupChat.style.display = isCloud ? 'block' : 'none';
+            }
+            
             modelSelect.addEventListener('change', toggleGaussianTalkerFields);
+            gpuChoiceSelectChat.addEventListener('change', toggleCloudConfigChat);
             toggleGaussianTalkerFields(); // 初始化
+            toggleCloudConfigChat(); // 初始化
+
+            // 参考音频文件拖拽支持
+            const refAudioFile = document.getElementById('ref_audio_file');
+            
+            refAudioFile.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.border = '2px dashed #4CAF50';
+            });
+            
+            refAudioFile.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.border = '';
+            });
+            
+            refAudioFile.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.border = '';
+                if (e.dataTransfer.files.length > 0) {
+                    this.files = e.dataTransfer.files;
+                }
+            });
         });
 
         // 语音录制功能
@@ -366,10 +466,10 @@
                 
                 mediaRecorder.start();
                 isRecording = true;
-                recordButton.innerHTML = '<span>■</span> 停止录音';
+                recordButton.innerHTML = '<span>⏹️</span> 点击结束录音';
                 recordButton.classList.add('recording');
                 recordingIndicator.style.display = 'flex';
-                statusMessage.textContent = '正在录音...';
+                statusMessage.textContent = '正在录音中，再次点击结束...';
                 
                 // 启动计时器
                 startTime = Date.now();
@@ -386,13 +486,18 @@
             if (mediaRecorder && isRecording) {
                 mediaRecorder.stop();
                 isRecording = false;
-                recordButton.innerHTML = '<span>●</span> 开始录音';
+                recordButton.innerHTML = '<span>🎙️</span> 点击开始录音';
                 recordButton.classList.remove('recording');
                 recordingIndicator.style.display = 'none';
-                statusMessage.textContent = '录音完成，正在保存...';
+                statusMessage.textContent = '录音完成，正在处理...';
                 
                 // 停止计时器
                 clearInterval(timerInterval);
+                
+                // 等待录音保存完成后自动触发对话
+                setTimeout(() => {
+                    autoStartChat();
+                }, 1000);
             }
         }
         
@@ -405,46 +510,73 @@
             }
         });
         
-        // 文件拖拽支持
+        // 上传按钮点击事件
+        const uploadButton = document.getElementById('uploadButton');
         const uploadAudioFileInput = document.getElementById('uploadAudioFile');
-        if (uploadAudioFileInput) {
-            uploadAudioFileInput.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.style.border = '2px dashed #4CAF50';
-            });
-            
-            uploadAudioFileInput.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.style.border = '';
-            });
-            
-            uploadAudioFileInput.addEventListener('drop', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.style.border = '';
-                if (e.dataTransfer.files.length > 0) {
-                    this.files = e.dataTransfer.files;
+        
+        uploadButton.addEventListener('click', () => {
+            uploadAudioFileInput.click();
+        });
+        
+        // 文件选择后自动处理
+        uploadAudioFileInput.addEventListener('change', async function() {
+            if (this.files && this.files[0]) {
+                const file = this.files[0];
+                statusMessage.textContent = '正在上传音频文件...';
+                
+                try {
+                    // 上传文件
+                    const uploadFormData = new FormData();
+                    uploadFormData.append('audio', file, 'input.wav');
+                    
+                    const response = await fetch('/save_audio', {
+                        method: 'POST',
+                        body: uploadFormData
+                    });
+                    
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        statusMessage.textContent = '音频上传成功，正在处理...';
+                        // 自动触发对话
+                        setTimeout(() => {
+                            autoStartChat();
+                        }, 500);
+                    } else {
+                        statusMessage.textContent = '音频上传失败';
+                        alert('上传失败: ' + data.message);
+                    }
+                } catch (error) {
+                    console.error('上传错误:', error);
+                    statusMessage.textContent = '上传时出错';
+                    alert('上传失败: ' + error.message);
                 }
-            });
+            }
+        });
+        
+        // 自动触发对话处理
+        function autoStartChat() {
+            const chatForm = document.getElementById('chatForm');
+            const formData = new FormData(chatForm);
+            
+            statusMessage.textContent = '正在处理对话...';
+            
+            processChat(formData);
         }
 
-        document.getElementById('chatForm').addEventListener('submit', async function (e) {
-            e.preventDefault();
-            const formData = new FormData(this);
+        // 处理对话的核心函数
+        async function processChat(formData) {
             const statusMessage = document.getElementById('statusMessage');
 
-            // 检查是否上传了音频文件（备选方案）
-            const uploadedAudioFile = uploadAudioFileInput ? uploadAudioFileInput.files[0] : null;
+            // 检查是否上传了参考音频（语音克隆）
+            const refAudioFileInput = document.getElementById('ref_audio_file');
+            const refAudioFile = refAudioFileInput ? refAudioFileInput.files[0] : null;
             
-            if (uploadedAudioFile) {
-                // 如果上传了音频文件，先上传到服务器
-                if (statusMessage) statusMessage.textContent = '正在上传音频文件...';
+            if (refAudioFile) {
+                if (statusMessage) statusMessage.textContent = '正在上传参考音频...';
                 
                 try {
                     const uploadFormData = new FormData();
-                    uploadFormData.append('file', uploadedAudioFile);
+                    uploadFormData.append('file', refAudioFile);
                     uploadFormData.append('type', 'audio');
                     
                     const uploadRes = await fetch('/upload_file', {
@@ -454,25 +586,14 @@
                     
                     const uploadData = await uploadRes.json();
                     if (uploadData.status === 'success') {
-                        // 将上传的音频文件路径复制到input.wav位置
-                        const copyRes = await fetch('/copy_uploaded_audio', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({uploaded_path: uploadData.file_path})
-                        });
-                        
-                        const copyData = await copyRes.json();
-                        if (copyData.status !== 'success') {
-                            alert('音频文件处理失败');
-                            return;
-                        }
-                        console.log('上传音频已处理:', uploadData.file_path);
+                        formData.set('ref_audio', uploadData.file_path);
+                        console.log('参考音频上传成功:', uploadData.file_path);
                     } else {
-                        alert('音频上传失败: ' + uploadData.message);
+                        alert('参考音频上传失败: ' + uploadData.message);
                         return;
                     }
                 } catch (err) {
-                    alert('音频上传失败: ' + err.message);
+                    alert('参考音频上传失败: ' + err.message);
                     return;
                 }
             }
@@ -502,23 +623,33 @@
 
                         // 刷新数字人视频
                         if (data.video_path) {
-                        const videoEl = document.getElementById('chatVideo');
-                        const newSrc = data.video_path + '?t=' + new Date().getTime();
-                        videoEl.src = newSrc;
-                        videoEl.load();
+                            const videoEl = document.getElementById('chatVideo');
+                            const newSrc = data.video_path + '?t=' + new Date().getTime();
+                            videoEl.src = newSrc;
+                            videoEl.load();
                         }
 
-                        if (statusMessage) statusMessage.textContent = '对话完成';
+                        if (statusMessage) statusMessage.textContent = '✅ 对话完成！可以开始下一轮';
+                        
+                        // 重置计时器
+                        timerDisplay.textContent = '00:00';
                     } else {
-                        if (statusMessage) statusMessage.textContent = '对话失败';
+                        if (statusMessage) statusMessage.textContent = '❌ 对话失败';
                         alert('对话失败: ' + (data.message || '未知错误'));
                     }
                 })
                 .catch(err => {
                     console.error('错误:', err);
-                    if (statusMessage) statusMessage.textContent = '对话失败';
+                    if (statusMessage) statusMessage.textContent = '❌ 对话失败';
                     alert('请求失败: ' + err.message);
                 });
+        }
+
+        // 表单提交事件（手动触发）
+        document.getElementById('chatForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            processChat(formData);
         });
     </script>
 </body>

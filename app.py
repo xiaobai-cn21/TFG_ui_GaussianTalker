@@ -43,15 +43,26 @@ def video_generation():
             "model_param": request.form.get('model_param'),
             "ref_audio": request.form.get('ref_audio'),
             "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
-            "target_text": request.form.get('target_text'),
+            # TTS语音克隆参数
+            "use_tts": request.form.get('use_tts') == 'on',
+            "tts_text": request.form.get('tts_text'),
+            "tts_ref_audio": request.form.get('tts_ref_audio'),
             # GaussianTalker专用参数
             "batch_size": request.form.get('batch_size', '128'),
             "iteration": request.form.get('iteration', '10000'),
+            # 云端SSH参数
+            "ssh_host": request.form.get('ssh_host', 'connect.bjb1.seetacloud.com'),
+            "ssh_port": request.form.get('ssh_port', 40258),
+            "ssh_password": request.form.get('ssh_password', '83WncIL5CoYB'),
         }
 
         try:
-            video_path = generate_video(data)
-            return jsonify({'status': 'success', 'video_path': video_path})
+            result = generate_video(data)
+            # 处理字典或字符串返回值
+            if isinstance(result, dict):
+                return jsonify(result)
+            else:
+                return jsonify({'status': 'success', 'video_path': result})
         except Exception as e:
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -106,6 +117,10 @@ def chat_system():
             "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
             "batch_size": request.form.get('batch_size', '128'),
             "iteration": request.form.get('iteration', '10000'),
+            "ref_audio": request.form.get('ref_audio', ''),  # 参考音频路径（用于语音克隆）
+            "ssh_host": request.form.get('ssh_host', 'connect.bjb1.seetacloud.com'),
+            "ssh_port": request.form.get('ssh_port', 40258),
+            "ssh_password": request.form.get('ssh_password', '83WncIL5CoYB'),
         }
 
         try:

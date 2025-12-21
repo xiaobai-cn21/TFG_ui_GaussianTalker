@@ -39,10 +39,26 @@
 
                 <div class="form-group">
                     <label>GPU选择</label>
-                    <select name="gpu_choice">
+                    <select name="gpu_choice" id="gpu_choice_select">
                         <option value="GPU0">GPU 0</option>
                         <option value="GPU1">GPU 1</option>
+                        <option value="cloud">Cloud (AutoDL)</option>
                     </select>
+                </div>
+
+                <!-- 云端SSH配置 -->
+                <div id="cloud_config_group" style="display: none;">
+                    <div class="form-group">
+                        <label>SSH端口号</label>
+                        <input type="number" name="ssh_port" value="40258">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH密码</label>
+                        <input type="password" name="ssh_password" value="83WncIL5CoYB">
+                    </div>
+                    <small style="color: #e74c3c; display: block; margin-top: -10px; margin-bottom: 10px;">
+                        ⚠️ 云端训练强制需要上传au.csv文件
+                    </small>
                 </div>
 
                 <div class="form-group">
@@ -82,9 +98,11 @@
     <script>
         // 根据模型选择显示/隐藏GaussianTalker专用参数
         const modelSelect = document.getElementById('model_choice_select');
+        const gpuChoiceSelect = document.getElementById('gpu_choice_select');
         const gtIterationsGroup = document.getElementById('gt_iterations_group');
         const gtConfigGroup = document.getElementById('gt_config_group');
         const gtAuGroup = document.getElementById('gt_au_group');
+        const cloudConfigGroup = document.getElementById('cloud_config_group');
         const useManualAuCheckbox = document.getElementById('use_manual_au');
         const auCsvFileInput = document.getElementById('au_csv_file');
 
@@ -95,8 +113,21 @@
             gtAuGroup.style.display = isGT ? 'block' : 'none';
         }
 
+        function toggleCloudConfig() {
+            const isCloud = gpuChoiceSelect.value === 'cloud';
+            cloudConfigGroup.style.display = isCloud ? 'block' : 'none';
+            
+            // 云端训练强制需要au.csv
+            if (isCloud && modelSelect.value === 'GaussianTalker') {
+                useManualAuCheckbox.checked = true;
+                auCsvFileInput.style.display = 'block';
+            }
+        }
+
         modelSelect.addEventListener('change', toggleGaussianTalkerOptions);
+        gpuChoiceSelect.addEventListener('change', toggleCloudConfig);
         toggleGaussianTalkerOptions(); // 初始化
+        toggleCloudConfig(); // 初始化
 
         // 手动AU上传复选框控制文件输入框显示
         useManualAuCheckbox.addEventListener('change', function () {

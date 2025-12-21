@@ -7,6 +7,15 @@ import shutil
 import time
 from backend.voice_cloner import synthesize_with_clone
 
+# 尝试导入 Whisper（用于本地语音识别，不需要外网）
+try:
+    import whisper
+    WHISPER_AVAILABLE = True
+    print("[backend.chat_engine] Whisper 可用，将使用本地语音识别")
+except ImportError:
+    WHISPER_AVAILABLE = False
+    print("[backend.chat_engine] Whisper 不可用，将使用 Google 语音识别（需要外网）")
+
 def chat_response(data):
     """
     实时对话系统：ASR -> LLM -> TTS（本地）
@@ -53,44 +62,39 @@ def chat_pipeline(data):
     input_audio = "./static/audios/input.wav"
     input_text = "./static/text/input.txt"
     recognized_text = audio_to_text(input_audio, input_text)
+    
+    # 🚫 禁用兜底逻辑：语音识别必须成功才继续
     if not recognized_text:
-        fallback_text = "你好，我的麦克风音频可能无效，请继续以文字方式交流。"
-        with open(input_text, 'w', encoding='utf-8') as f:
-            f.write(fallback_text)
-        recognized_text = fallback_text
+        raise Exception("语音识别失败：无法识别音频内容，请检查麦克风或上传有效音频文件")
 
     output_text = "./static/text/output.txt"
-    api_key = ""
+    api_key = "59086bcdaac941d18fd92545b7417739.OSRp1IXGkA3OMKAQ"
     model = "glm-4-flash"
     ai_response = get_ai_response(input_text, output_text, api_key, model)
+    
+    # 🚫 禁用兜底逻辑：大模型必须成功响应才继续
+    if not ai_response or ai_response.strip() == "":
+        raise Exception("大模型响应失败：未能获取有效回复，请检查API配置")
 
-    # 选择TTS：优先尝试语音克隆，失败则回退到本地pyttsx3
+    # 选择TTS：如果提供了参考音频就使用语音克隆，否则使用默认TTS
     output_audio = "./static/audios/ai_response.wav"
     tts_audio_path = None
 
-    # 解析语音克隆参数
-    voice_clone = (data.get('voice_clone') or '').strip() if isinstance(data, dict) else ''
-    ref_audio_path = None
-    if voice_clone:
-        # 预设：cloneA/cloneB -> static/voices/{name}.wav
-        if voice_clone.lower() in ("clonea", "cloneb"):
-            preset_dir = os.path.join("static", "voices")
-            preset_path = os.path.join(preset_dir, f"{voice_clone}.wav")
-            if os.path.exists(preset_path):
-                ref_audio_path = preset_path
-        # 使用当前录音作为参考
-        elif voice_clone.lower() in ("use_input", "input", "current"):
-            if os.path.exists(input_audio):
-                ref_audio_path = input_audio
-        # 若传入自定义路径
-        elif os.path.exists(voice_clone):
-            ref_audio_path = voice_clone
-
+    # 检查是否上传了参考音频（用于语音克隆）
+    ref_audio_path = data.get('ref_audio', '').strip() if isinstance(data, dict) else ''
+    
+    print(f"[backend.chat_engine] 🔍 检查参考音频参数: ref_audio='{ref_audio_path}'")
+    
     if ref_audio_path and os.path.exists(ref_audio_path):
+        print(f"[backend.chat_engine] ✅ 使用参考音频进行语音克隆: {ref_audio_path}")
         try:
             tts_audio_path = synthesize_with_clone(ai_response, ref_audio_path, output_audio, language='zh')
         except Exception as e:
             print(f"[backend.chat_engine] 语音克隆失败，将回退到本地TTS。原因: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("[backend.chat_engine] 未提供参考音频，使用默认TTS")
 
     if not tts_audio_path:
         tts_audio_path = text_to_speech(ai_response, output_audio)
@@ -109,27 +113,27 @@ def chat_pipeline(data):
             from backend.video_generator import generate_video
             
             # 构造传递给generate_video的数据
+            # 🔥 实时对话音频很短，降低batch_size避免OOM
             video_gen_data = {
                 "model_name": model_name,
                 "model_param": model_param,
                 "ref_audio": tts_audio_path,
                 "gpu_choice": data.get('gpu_choice', 'GPU0'),
-                "batch_size": data.get('batch_size', '128'),
-                "iteration": data.get('iteration', '10000')
+                "batch_size": data.get('batch_size', '16'),  # 默认降低到16
+                "iteration": data.get('iteration', '10000'),
+                "ssh_host": data.get('ssh_host', 'connect.bjb1.seetacloud.com'),
+                "ssh_port": data.get('ssh_port', 40258),
+                "ssh_password": data.get('ssh_password', '83WncIL5CoYB')
             }
             
             video_gen_result = generate_video(video_gen_data)
             
-            if video_gen_result.get("status") == "success":
-                generated_video = video_gen_result.get("video_path")
-                if generated_video and os.path.exists(generated_video):
-                    video_path = generated_video
-                    print(f"[backend.chat_engine] 数字人视频生成成功：{video_path}")
-                else:
-                    print(f"[backend.chat_engine] 视频生成返回成功但文件不存在：{generated_video}")
+            # generate_video返回的是视频路径字符串
+            if video_gen_result and isinstance(video_gen_result, str) and os.path.exists(video_gen_result):
+                video_path = video_gen_result
+                print(f"[backend.chat_engine] 数字人视频生成成功：{video_path}")
             else:
-                error_msg = video_gen_result.get('message', '未知错误')
-                print(f"[backend.chat_engine] 数字人视频生成失败：{error_msg}")
+                print(f"[backend.chat_engine] 数字人视频生成失败或文件不存在：{video_gen_result}")
                 # 失败时使用占位视频（保持原有行为）
                 
         except Exception as e:
@@ -171,52 +175,97 @@ def _ffmpeg_convert_to_pcm16_mono_16k(src_path, dst_path):
 
 
 def audio_to_text(input_audio, input_text):
+    """
+    使用 Whisper 本地模型进行语音识别（无需外网）
+    优先使用 Whisper，如果不可用则回退到 Google 识别
+    """
     try:
-        # 初始化识别器
-        recognizer = sr.Recognizer()
-        
-        def _recognize_from_file(path):
-            with sr.AudioFile(path) as source:
-                # 调整环境噪声
-                recognizer.adjust_for_ambient_noise(source)
-                # 读取音频数据
-                audio_data = recognizer.record(source)
-                print("正在识别语音...")
-                # 使用Google语音识别
-                return recognizer.recognize_google(audio_data, language='zh-CN')
+        if WHISPER_AVAILABLE:
+            # 使用 Whisper 本地模型
+            print("[backend.chat_engine] 使用 Whisper 进行语音识别...")
+            
+            # 设置模型下载路径到项目目录（非C盘）
+            model_cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'whisper_models')
+            os.makedirs(model_cache_dir, exist_ok=True)
+            print(f"[backend.chat_engine] Whisper 模型缓存目录: {model_cache_dir}")
+            
+            # 加载模型（使用 medium 模型，准确率很高，约769MB）
+            # 可选模型：tiny(39M), base(74M), small(244M), medium(769M, 推荐), large(1550M)
+            model = whisper.load_model("medium", download_root=model_cache_dir)
+            
+            # 识别音频，添加优化参数
+            result = model.transcribe(
+                input_audio, 
+                language='zh',           # 指定中文
+                initial_prompt="以下是普通话的句子。",  # 提示词，提高中文识别率
+                temperature=0.0,         # 降低随机性，提高准确性
+                compression_ratio_threshold=2.4,
+                logprob_threshold=-1.0,
+                no_speech_threshold=0.6,
+                beam_size=5,            # 使用束搜索，提高准确率
+                best_of=5               # 从多个候选中选择最佳结果
+            )
+            text = result["text"].strip()
+            
+            if not text:
+                print("[backend.chat_engine] Whisper 识别结果为空")
+                return None
+            
+            # 保存结果
+            with open(input_text, 'w', encoding='utf-8') as f:
+                f.write(text)
+            
+            print(f"语音识别完成！结果已保存到: {input_text}")
+            print(f"识别结果: {text}")
+            return text
+        else:
+            # 回退到 Google 语音识别（需要外网）
+            print("[backend.chat_engine] Whisper 不可用，使用 Google 语音识别（需要网络）...")
+            recognizer = sr.Recognizer()
+            
+            def _recognize_from_file(path):
+                with sr.AudioFile(path) as source:
+                    recognizer.adjust_for_ambient_noise(source)
+                    audio_data = recognizer.record(source)
+                    print("正在识别语音...")
+                    return recognizer.recognize_google(audio_data, language='zh-CN')
 
-        # 第一次尝试直接读取
-        try:
-            text = _recognize_from_file(input_audio)
-        except Exception as e:
-            print('[backend.chat_engine] 直接读取音频失败，将尝试转码。原因:', e)
-            # 若失败，尝试用 ffmpeg 转码后再识别
-            tmp_converted = os.path.join(os.path.dirname(input_audio), '__converted_tmp__.wav')
-            if _ffmpeg_convert_to_pcm16_mono_16k(input_audio, tmp_converted):
-                text = _recognize_from_file(tmp_converted)
-                try:
-                    os.remove(tmp_converted)
-                except Exception:
-                    pass
-            else:
-                # 转码失败则抛给外层 except 流程
-                raise
-        
-        # 将结果写入文件
-        with open(input_text, 'w', encoding='utf-8') as f:
-            f.write(text)
-        print(f"语音识别完成！结果已保存到: {input_text}")
-        print(f"识别结果: {text}")
-        return text
+            # 第一次尝试直接读取
+            try:
+                text = _recognize_from_file(input_audio)
+            except Exception as e:
+                print('[backend.chat_engine] 直接读取音频失败，将尝试转码。原因:', e)
+                tmp_converted = os.path.join(os.path.dirname(input_audio), '__converted_tmp__.wav')
+                if _ffmpeg_convert_to_pcm16_mono_16k(input_audio, tmp_converted):
+                    text = _recognize_from_file(tmp_converted)
+                    try:
+                        os.remove(tmp_converted)
+                    except Exception:
+                        pass
+                else:
+                    raise
+            
+            # 保存结果
+            with open(input_text, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print(f"语音识别完成！结果已保存到: {input_text}")
+            print(f"识别结果: {text}")
+            return text
             
     except sr.UnknownValueError:
         print("无法识别音频内容")
+        return None
     except sr.RequestError as e:
         print(f"语音识别服务错误: {e}")
+        return None
     except FileNotFoundError:
         print(f"音频文件不存在: {input_audio}")
+        return None
     except Exception as e:
-        print(f"发生错误: {e}")
+        print(f"语音识别发生错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def get_ai_response(input_text, output_text, api_key, model):
     try:
@@ -230,9 +279,15 @@ def get_ai_response(input_text, output_text, api_key, model):
         with open(input_text, 'r', encoding='utf-8') as file:
             content = file.read().strip()
 
+        # 添加系统提示，限制回复长度
+        system_prompt = "你是一个友好的AI助手。请用简洁、自然的语言回答用户问题，回复控制在三句话以内。保持对话轻松、口语化。"
+        
         response = client.chat.completions.create(
             model=model,
-            messages=[{"role": "user", "content": content}]
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content}
+            ]
         )
         output = response.choices[0].message.content
 

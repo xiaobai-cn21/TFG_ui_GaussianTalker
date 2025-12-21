@@ -36,6 +36,28 @@
                 </div>
 
                 <div class="form-group">
+                    <label>
+                        <input type="checkbox" name="use_tts" id="use_tts_checkbox" style="margin-right: 8px;">
+                        使用语音克隆（将文字转为语音）
+                    </label>
+                </div>
+
+                <!-- TTS文字输入框（使用语音克隆时显示） -->
+                <div class="form-group" id="tts_text_group" style="display: none;">
+                    <label>要说的文字 *</label>
+                    <textarea name="tts_text" id="tts_text_input" placeholder="输入要转换为语音的文字内容" rows="3"></textarea>
+                </div>
+
+                <!-- TTS参考音频（使用语音克隆时显示） -->
+                <div class="form-group" id="tts_ref_audio_group" style="display: none;">
+                    <label>语音克隆参考音频 *</label>
+                    <input type="file" name="tts_ref_audio_file" id="tts_ref_audio_file" accept="audio/*" style="margin-bottom: 10px;">
+                    <input type="text" name="tts_ref_audio" id="tts_ref_audio_path" placeholder="或输入音频路径">
+                    <small style="color: #666;">用于克隆音色的参考音频（支持拖拽）</small>
+                </div>
+
+                <!-- 直接上传音频（不使用语音克隆时显示） -->
+                <div class="form-group" id="direct_audio_group">
                     <label>参考音频上传</label>
                     <input type="file" name="ref_audio_file" id="ref_audio_file" accept="audio/*" style="margin-bottom: 10px;">
                     <input type="text" name="ref_audio" id="ref_audio_path" placeholder="或输入音频路径">
@@ -44,10 +66,23 @@
                 
                 <div class="form-group">
                     <label>GPU选择</label>
-                    <select name="gpu_choice">
+                    <select name="gpu_choice" id="gpu_choice_select_gen">
                         <option value="GPU0">GPU 0</option>
                         <option value="GPU1">GPU 1</option>
+                        <option value="cloud">Cloud (AutoDL)</option>
                     </select>
+                </div>
+
+                <!-- 云端SSH配置 -->
+                <div id="cloud_config_group_gen" style="display: none;">
+                    <div class="form-group">
+                        <label>SSH端口号</label>
+                        <input type="number" name="ssh_port" value="40258">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH密码</label>
+                        <input type="password" name="ssh_password" value="83WncIL5CoYB">
+                    </div>
                 </div>
 
                 <!-- GaussianTalker专用参数 -->
@@ -61,11 +96,6 @@
                     <input type="number" name="iteration" value="10000" min="1000" step="1000">
                 </div>
 
-                <div class="form-group">
-                    <label>目标文字（文本框）</label>
-                    <textarea name="target_text" placeholder="留空则直接使用参考音频"></textarea>
-                </div>
-
                 <button type="submit" class="generate-btn">生成视频</button>
             </form>
         </div>
@@ -74,8 +104,10 @@
     <script>
         // 根据模型选择显示/隐藏GaussianTalker专用参数
         const modelSelect = document.getElementById('model_name_select');
+        const gpuChoiceSelectGen = document.getElementById('gpu_choice_select_gen');
         const gtBatchSizeGroup = document.getElementById('gt_batch_size_group');
         const gtIterationGroup = document.getElementById('gt_iteration_group');
+        const cloudConfigGroupGen = document.getElementById('cloud_config_group_gen');
 
         function toggleGaussianTalkerOptions() {
             const isGT = modelSelect.value === 'GaussianTalker';
@@ -83,10 +115,33 @@
             gtIterationGroup.style.display = isGT ? 'block' : 'none';
         }
 
-        modelSelect.addEventListener('change', toggleGaussianTalkerOptions);
-        toggleGaussianTalkerOptions(); // 初始化
+        function toggleCloudConfigGen() {
+            const isCloud = gpuChoiceSelectGen.value === 'cloud';
+            cloudConfigGroupGen.style.display = isCloud ? 'block' : 'none';
+        }
 
-        // 文件拖拽支持
+        modelSelect.addEventListener('change', toggleGaussianTalkerOptions);
+        gpuChoiceSelectGen.addEventListener('change', toggleCloudConfigGen);
+        toggleGaussianTalkerOptions(); // 初始化
+        toggleCloudConfigGen(); // 初始化
+
+        // 语音克隆选项切换
+        const useTTSCheckbox = document.getElementById('use_tts_checkbox');
+        const ttsTextGroup = document.getElementById('tts_text_group');
+        const ttsRefAudioGroup = document.getElementById('tts_ref_audio_group');
+        const directAudioGroup = document.getElementById('direct_audio_group');
+
+        function toggleTTSOptions() {
+            const useTTS = useTTSCheckbox.checked;
+            ttsTextGroup.style.display = useTTS ? 'block' : 'none';
+            ttsRefAudioGroup.style.display = useTTS ? 'block' : 'none';
+            directAudioGroup.style.display = useTTS ? 'none' : 'block';
+        }
+
+        useTTSCheckbox.addEventListener('change', toggleTTSOptions);
+        toggleTTSOptions(); // 初始化
+
+        // 文件拖拽支持 - 直接上传音频
         const refAudioFileInput = document.getElementById('ref_audio_file');
         refAudioFileInput.addEventListener('dragover', function(e) {
             e.preventDefault();
@@ -109,39 +164,108 @@
             }
         });
 
+        // 文件拖拽支持 - TTS参考音频
+        const ttsRefAudioFileInput = document.getElementById('tts_ref_audio_file');
+        ttsRefAudioFileInput.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '2px dashed #4CAF50';
+        });
+        
+        ttsRefAudioFileInput.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '';
+        });
+        
+        ttsRefAudioFileInput.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.border = '';
+            if (e.dataTransfer.files.length > 0) {
+                this.files = e.dataTransfer.files;
+            }
+        });
+
         document.getElementById('videoForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
             const formData = new FormData(this);
+            const useTTS = document.getElementById('use_tts_checkbox').checked;
             
-            // 如果上传了文件，先上传音频到服务器
-            const audioFile = formData.get('ref_audio_file');
-            let audioPath = formData.get('ref_audio');
-            
-            if (audioFile && audioFile.size > 0) {
-                alert('正在上传音频文件，请稍候...');
-                try {
-                    const uploadFormData = new FormData();
-                    uploadFormData.append('file', audioFile);
-                    uploadFormData.append('type', 'audio');
-                    
-                    const uploadRes = await fetch('/upload_file', {
-                        method: 'POST',
-                        body: uploadFormData
-                    });
-                    
-                    const uploadData = await uploadRes.json();
-                    if (uploadData.status === 'success') {
-                        audioPath = uploadData.file_path;
-                        formData.set('ref_audio', audioPath);
-                        console.log('音频上传成功:', audioPath);
-                    } else {
-                        alert('音频上传失败: ' + uploadData.message);
+            // 如果使用语音克隆
+            if (useTTS) {
+                const ttsText = formData.get('tts_text');
+                if (!ttsText || !ttsText.trim()) {
+                    alert('请输入要转换为语音的文字内容');
+                    return;
+                }
+                
+                // 上传TTS参考音频
+                const ttsRefAudioFile = formData.get('tts_ref_audio_file');
+                let ttsRefAudioPath = formData.get('tts_ref_audio');
+                
+                if (!ttsRefAudioPath && (!ttsRefAudioFile || ttsRefAudioFile.size === 0)) {
+                    alert('请上传语音克隆参考音频');
+                    return;
+                }
+                
+                if (ttsRefAudioFile && ttsRefAudioFile.size > 0) {
+                    alert('正在上传语音克隆参考音频，请稍候...');
+                    try {
+                        const uploadFormData = new FormData();
+                        uploadFormData.append('file', ttsRefAudioFile);
+                        uploadFormData.append('type', 'audio');
+                        
+                        const uploadRes = await fetch('/upload_file', {
+                            method: 'POST',
+                            body: uploadFormData
+                        });
+                        
+                        const uploadData = await uploadRes.json();
+                        if (uploadData.status === 'success') {
+                            ttsRefAudioPath = uploadData.file_path;
+                            formData.set('tts_ref_audio', ttsRefAudioPath);
+                            console.log('TTS参考音频上传成功:', ttsRefAudioPath);
+                        } else {
+                            alert('TTS参考音频上传失败: ' + uploadData.message);
+                            return;
+                        }
+                    } catch (err) {
+                        alert('TTS参考音频上传失败: ' + err.message);
                         return;
                     }
-                } catch (err) {
-                    alert('音频上传失败: ' + err.message);
-                    return;
+                }
+            } else {
+                // 不使用语音克隆，直接上传音频文件
+                const audioFile = formData.get('ref_audio_file');
+                let audioPath = formData.get('ref_audio');
+                
+                if (audioFile && audioFile.size > 0) {
+                    alert('正在上传音频文件，请稍候...');
+                    try {
+                        const uploadFormData = new FormData();
+                        uploadFormData.append('file', audioFile);
+                        uploadFormData.append('type', 'audio');
+                        
+                        const uploadRes = await fetch('/upload_file', {
+                            method: 'POST',
+                            body: uploadFormData
+                        });
+                        
+                        const uploadData = await uploadRes.json();
+                        if (uploadData.status === 'success') {
+                            audioPath = uploadData.file_path;
+                            formData.set('ref_audio', audioPath);
+                            console.log('音频上传成功:', audioPath);
+                        } else {
+                            alert('音频上传失败: ' + uploadData.message);
+                            return;
+                        }
+                    } catch (err) {
+                        alert('音频上传失败: ' + err.message);
+                        return;
+                    }
                 }
             }
 

@@ -6,10 +6,50 @@ import shutil
 def generate_video(data):
     """
     模拟视频生成逻辑：接收来自前端的参数，并返回一个视频路径。
+    支持：1. 直接使用上传的音频  2. 使用TTS语音克隆生成音频
     """
     print("[backend.video_generator] 收到数据：")
     for k, v in data.items():
         print(f"  {k}: {v}")
+    
+    # 🔥 步骤1: 如果启用了TTS语音克隆，先生成音频
+    if data.get('use_tts'):
+        print("[backend.video_generator] 启用TTS语音克隆")
+        tts_text = data.get('tts_text', '').strip()
+        tts_ref_audio = data.get('tts_ref_audio', '').strip()
+        
+        if not tts_text:
+            print("[backend.video_generator] TTS文字为空，跳过")
+            return {'status': 'error', 'message': '请提供要转换为语音的文字'}
+        
+        if not tts_ref_audio or not os.path.exists(tts_ref_audio):
+            print("[backend.video_generator] TTS参考音频不存在，跳过")
+            return {'status': 'error', 'message': '请提供语音克隆参考音频'}
+        
+        try:
+            from backend.voice_cloner import synthesize_with_clone
+            
+            # 生成TTS音频
+            os.makedirs('./static/audios', exist_ok=True)
+            tts_output_audio = "./static/audios/tts_generated.wav"
+            
+            print(f"[backend.video_generator] 开始TTS合成：文字='{tts_text[:50]}...', 参考音频={tts_ref_audio}")
+            synthesize_with_clone(
+                text=tts_text,
+                ref_audio_path=tts_ref_audio,
+                out_path=tts_output_audio,
+                language='zh-cn'
+            )
+            
+            # 用生成的TTS音频替换ref_audio
+            data['ref_audio'] = tts_output_audio
+            print(f"[backend.video_generator] TTS合成成功：{tts_output_audio}")
+            
+        except Exception as e:
+            print(f"[backend.video_generator] TTS合成失败：{e}")
+            import traceback
+            traceback.print_exc()
+            return {'status': 'error', 'message': f'TTS合成失败: {e}'}
 
     if data['model_name'] == "SyncTalk":
         try:
@@ -71,13 +111,35 @@ def generate_video(data):
             return os.path.join("static", "videos", "out.mp4")
     
     elif data['model_name'] == "GaussianTalker":
+        gpu_choice = data.get('gpu_choice', 'GPU0')
+        
+        # 云端渲染
+        if gpu_choice == 'cloud':
+            print("[backend.video_generator] 使用云端渲染")
+            from backend.cloud_trainer import cloud_render_video
+            
+            try:
+                success, message, video_path = cloud_render_video(data)
+                if success and video_path:
+                    print(f"[backend.video_generator] 云端渲染成功: {video_path}")
+                    return video_path
+                else:
+                    print(f"[backend.video_generator] 云端渲染失败: {message}")
+                    return os.path.join("static", "videos", "out.mp4")
+            except Exception as e:
+                print(f"[backend.video_generator] 云端渲染异常: {e}")
+                import traceback
+                traceback.print_exc()
+                return os.path.join("static", "videos", "out.mp4")
+        
+        # 本地渲染
         try:
             # 构建命令
             cmd = [
                 './GaussianTalker/run_gaussiantalker.sh', 'infer',
                 '--model_dir', data['model_param'],
                 '--audio_path', data['ref_audio'],
-                '--gpu', data.get('gpu_choice', 'GPU0')
+                '--gpu', gpu_choice
             ]
             
             # 添加batch_size和iteration参数（使用默认值）

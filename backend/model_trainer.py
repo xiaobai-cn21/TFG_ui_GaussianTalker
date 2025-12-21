@@ -50,12 +50,33 @@ def train_model(data):
             return video_path
 
     elif data['model_choice'] == "GaussianTalker":
+        gpu_choice = data.get('gpu_choice', 'GPU0')
+        
+        # 云端训练
+        if gpu_choice == 'cloud':
+            print("[backend.model_trainer] 使用云端训练")
+            from backend.cloud_trainer import cloud_train_model
+            
+            try:
+                success, message = cloud_train_model(data)
+                if success:
+                    print(f"[backend.model_trainer] 云端训练成功: {message}")
+                else:
+                    print(f"[backend.model_trainer] 云端训练失败: {message}")
+                return video_path
+            except Exception as e:
+                print(f"[backend.model_trainer] 云端训练异常: {e}")
+                import traceback
+                traceback.print_exc()
+                return video_path
+        
+        # 本地训练
         try:
             # 构建命令
             cmd = [
                 "./GaussianTalker/run_gaussiantalker.sh", "train",
                 "--video_path", data['ref_video'],
-                "--gpu", data.get('gpu_choice', 'GPU0'),
+                "--gpu", gpu_choice,
                 "--iterations", data.get('iterations', '10000')
             ]
             

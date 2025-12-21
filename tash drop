@@ -231,4 +231,324 @@
 [32m+[m[32m- ✅ Wav2Vec音频模型[m
 [32m+[m[32m- ✅ 人脸解析模型[m
 [32m+[m[32m- ✅ 其他预训练权重[m
+[32m+[m
+[32m+[m[32m#### 2.2 手动下载BFM模型（必需）[m
+[32m+[m
+[32m+[m[32m**重要**: BFM模型需要手动下载，因为需要注册账号。[m
+[32m+[m
+[32m+[m[32m1. 访问 [Basel Face Model官网](https://faces.dmi.unibas.ch/bfm/bfm2019.html)[m
+[32m+[m[32m2. 注册账号并下载 `01_MorphableModel.mat`[m
+[32m+[m[32m3. 将文件放置到：`data_utils/face_tracking/3DMM/01_MorphableModel.mat`[m
+[32m+[m
+[32m+[m[32m**验证文件**：[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 检查BFM模型是否存在[m
+[32m+[m[32mls -lh data_utils/face_tracking/3DMM/01_MorphableModel.mat[m
+[32m+[m
+[32m+[m[32m# 应该看到约240MB的文件[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m#### 2.3 验证预训练模型[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 检查所有预训练模型是否就位[m
+[32m+[m[32mpython -c "[m
+[32m+[m[32mimport os[m
+[32m+[m[32mmodels = [[m
+[32m+[m[32m    'data_utils/face_tracking/3DMM/01_MorphableModel.mat',[m
+[32m+[m[32m    '.cache/torch/hub/checkpoints/79999_iter.pth',[m
+[32m+[m[32m][m
+[32m+[m[32mfor m in models:[m
+[32m+[m[32m    exists = '✓' if os.path.exists(m) else '✗'[m
+[32m+[m[32m    print(f'{exists} {m}')[m
+[32m+[m[32m"[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 第3步：构建Docker镜像[m
+[32m+[m
+[32m+[m[32m#### 3.1 准备构建[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 确保当前在GaussianTalker目录[m
+[32m+[m[32mcd TFG_ui_GaussianTalker/GaussianTalker[m
+[32m+[m
+[32m+[m[32m# 检查Dockerfile[m
+[32m+[m[32mcat Dockerfile[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m#### 3.2 开始构建（预计30-60分钟）[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 构建镜像[m
+[32m+[m[32mdocker build -t gaussiantalker:latest .[m
+[32m+[m
+[32m+[m[32m# 监控构建过程[m
+[32m+[m[32m# 如果构建失败，查看错误日志[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m**构建优化建议**：[m
+[32m+[m[32m- 使用国内镜像源加速（已在Dockerfile中配置）[m
+[32m+[m[32m- 确保网络稳定[m
+[32m+[m[32m- 预留足够磁盘空间（约15GB）[m
+[32m+[m
+[32m+[m[32m#### 3.3 验证镜像[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 检查镜像是否构建成功[m
+[32m+[m[32mdocker images | grep gaussiantalker[m
+[32m+[m
+[32m+[m[32m# 测试镜像[m
+[32m+[m[32mdocker run --rm gaussiantalker:latest python --version[m
+[32m+[m[32m# 应输出: Python 3.7.x[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 第4步：准备测试数据[m
+[32m+[m
+[32m+[m[32m#### 4.1 测试视频要求[m
+[32m+[m
+[32m+[m[32m**理想测试视频特征**：[m
+[32m+[m[32m- 📹 **分辨率**: 1080p (1920x1080) 或 720p (1280x720)[m
+[32m+[m[32m- ⏱️ **时长**: 3-5分钟[m
+[32m+[m[32m- 👤 **内容**: 单人正面说话，表情丰富[m
+[32m+[m[32m- 💡 **光照**: 稳定、充足、均匀[m
+[32m+[m[32m- 🎬 **背景**: 干净、对比度好[m
+[32m+[m[32m- 🎤 **音频**: 清晰、无噪音、16kHz采样率[m
+[32m+[m
+[32m+[m[32m#### 4.2 获取测试数据[m
+[32m+[m
+[32m+[m[32m**方案一：使用公开数据集**[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 下载AD-NeRF数据集样本（推荐）[m
+[32m+[m[32mmkdir -p test_data[m
+[32m+[m[32mcd test_data[m
+[32m+[m
+[32m+[m[32m# 使用wget或curl下载测试视频[m
+[32m+[m[32m# 示例：Obama演讲视频[m
+[32m+[m[32mwget https://example.com/obama_sample.mp4[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m**方案二：自制测试视频**[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 使用ffmpeg处理视频[m
+[32m+[m[32mffmpeg -i input.mp4 -vf "scale=1280:720" -c:v libx264 -preset slow -crf 18 \[m
+[32m+[m[32m       -c:a aac -b:a 192k -ar 16000 output.mp4[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m#### 4.3 放置测试数据[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 创建测试数据目录[m
+[32m+[m[32mmkdir -p ../test_data[m
+[32m+[m[32mcp your_video.mp4 ../test_data/test_video.mp4[m
+[32m+[m
+[32m+[m[32m# 验证视频信息[m
+[32m+[m[32mffprobe ../test_data/test_video.mp4[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 第5步：执行完整训练流程[m
+[32m+[m
+[32m+[m[32m#### 5.1 测试模式（推荐先测试）[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 使用测试模式验证脚本逻辑（不真正运行Docker）[m
+[32m+[m[32mTEST_MODE=1 ./run_gaussiantalker.sh train \[m
+[32m+[m[32m    --video_path ../test_data/test_video.mp4 \[m
+[32m+[m[32m    --gpu GPU0 \[m
+[32m+[m[32m    --iterations 1000 \[m
+[32m+[m[32m    --config arguments/64_dim_1_transformer.py[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m#### 5.2 正式训练（首次小规模测试）[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 首次训练建议使用较少迭代数（1000-2000）[m
+[32m+[m[32m./run_gaussiantalker.sh train \[m
+[32m+[m[32m    --video_path ../test_data/test_video.mp4 \[m
+[32m+[m[32m    --gpu GPU0 \[m
+[32m+[m[32m    --iterations 2000 \[m
+[32m+[m[32m    --config arguments/64_dim_1_transformer.py[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m**训练过程监控**：[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 在另一个终端监控GPU使用情况[m
+[32m+[m[32mwatch -n 1 nvidia-smi[m
+[32m+[m
+[32m+[m[32m# 查看Docker容器日志[m
+[32m+[m[32mdocker ps  # 获取容器ID[m
+[32m+[m[32mdocker logs -f <container_id>[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m#### 5.3 检查训练结果[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 训练完成后检查输出[m
+[32m+[m[32mls -la ./GaussianTalker/data/test_video/[m
+[32m+[m[32mls -la ./GaussianTalker/output/test_video/[m
+[32m+[m
+[32m+[m[32m# 查看点云文件[m
+[32m+[m[32mls -la ./GaussianTalker/output/test_video/point_cloud/[m
+[32m+[m
+[32m+[m[32m# 检查训练日志[m
+[32m+[m[32mcat ./GaussianTalker/output/test_video/log.txt[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 🔧 分步骤执行（高级用法）[m
+[32m+[m
+[32m+[m[32m有时你可能需要分步骤执行训练流程，以便更好地控制和调试。[m
+[32m+[m
+[32m+[m[32m### 步骤A：仅预处理[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 只执行数据预处理，不训练[m
+[32m+[m[32m./run_gaussiantalker.sh preprocess_only \[m
+[32m+[m[32m    --video_path ../test_data/test_video.mp4 \[m
+[32m+[m[32m    --gpu GPU0[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m**预处理输出**：[m
+[32m+[m[32m- `data/test_video/ori_imgs/` - 原始帧图像[m
+[32m+[m[32m- `data/test_video/gt_imgs/` - Ground truth图像[m
+[32m+[m[32m- `data/test_video/parsing/` - 人脸分割mask[m
+[32m+[m[32m- `data/test_video/torso_imgs/` - 躯干图像[m
+[32m+[m[32m- `data/test_video/aud.wav` - 提取的音频[m
+[32m+[m[32m- `data/test_video/aud_ds.npy` - DeepSpeech特征[m
+[32m+[m[32m- `data/test_video/au.csv` - 面部动作单元[m
+[32m+[m[32m- `data/test_video/transforms_train.json` - 相机参数[m
+[32m+[m
+[32m+[m[32m### 步骤B：仅训练[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 使用已预处理的数据进行训练[m
+[32m+[m[32m./run_gaussiantalker.sh train_only \[m
+[32m+[m[32m    --data_dir test_video \[m
+[32m+[m[32m    --gpu GPU0 \[m
+[32m+[m[32m    --iterations 10000 \[m
+[32m+[m[32m    --config arguments/64_dim_1_transformer.py[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 步骤C：模型推理[m
+[32m+[m
+[32m+[m[32m#### C.1 准备推理音频[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 准备驱动音频（必须是.wav格式）[m
+[32m+[m[32mcp your_speech.wav ./GaussianTalker/data/test_video/speech.wav[m
+[32m+[m
+[32m+[m[32m# 提取DeepSpeech特征[m
+[32m+[m[32mdocker run --rm --gpus device=0 \[m
+[32m+[m[32m    -v $(pwd)/GaussianTalker/data:/GaussianTalker/data \[m
+[32m+[m[32m    gaussiantalker:latest \[m
+[32m+[m[32m    python data_utils/deepspeech_features/extract_ds_features.py \[m
+[32m+[m[32m    /GaussianTalker/data/test_video/speech.wav \[m
+[32m+[m[32m    /GaussianTalker/data/test_video/speech.npy[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m#### C.2 执行推理[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 使用训练好的模型生成视频[m
+[32m+[m[32m./run_gaussiantalker.sh infer \[m
+[32m+[m[32m    --model_dir test_video \[m
+[32m+[m[32m    --audio_path ./GaussianTalker/data/test_video/speech.wav \[m
+[32m+[m[32m    --gpu GPU0 \[m
+[32m+[m[32m    --batch_size 128 \[m
+[32m+[m[32m    --iteration 10000[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m#### C.3 查看生成视频[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 推理结果位置[m
+[32m+[m[32mOUTPUT_VIDEO="./GaussianTalker/output/test_video/custom/ours_10000/renders/output.mp4"[m
+[32m+[m
+[32m+[m[32m# 播放视频（Linux）[m
+[32m+[m[32mvlc $OUTPUT_VIDEO[m
+[32m+[m
+[32m+[m[32m# 或复制到static目录供Web界面访问[m
+[32m+[m[32mcp $OUTPUT_VIDEO ../static/videos/gaussiantalker_output.mp4[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 🎯 参数优化指南[m
+[32m+[m
+[32m+[m[32m### 训练参数调优[m
+[32m+[m
+[32m+[m[32m#### 1. 迭代次数（iterations）[m
+[32m+[m
+[32m+[m[32m| 迭代数 | 训练时间 | 质量 | 适用场景 |[m
+[32m+[m[32m|--------|----------|------|----------|[m
+[32m+[m[32m| 1000-2000 | 15-30分钟 | 低 | 快速测试 |[m
+[32m+[m[32m| 5000-7000 | 1-1.5小时 | 中 | 初步训练 |[m
+[32m+[m[32m| 10000 | 2-3小时 | 高 | 标准训练 |[m
+[32m+[m[32m| 15000-20000 | 3-5小时 | 很高 | 高质量输出 |[m
+[32m+[m
+[32m+[m[32m**推荐**：首次测试用2000，正式训练用10000。[m
+[32m+[m
+[32m+[m[32m#### 2. 配置文件选择[m
+[32m+[m
+[32m+[m[32m**`arguments/64_dim_1_transformer.py`**（推荐）[m
+[32m+[m[32m- ✅ 训练速度快[m
+[32m+[m[32m- ✅ 显存占用少[m
+[32m+[m[32m- ✅ 质量良好[m
+[32m+[m[32m- 适用于大多数场景[m
+[32m+[m
+[32m+[m[32m**`arguments/64_dim_2_transformer.py`**[m
+[32m+[m[32m- ✅ 质量更高[m
+[32m+[m[32m- ⚠️ 训练速度慢20-30%[m
+[32m+[m[32m- ⚠️ 显存占用更多[m
+[32m+[m[32m- 适用于追求极致质量[m
+[32m+[m
+[32m+[m[32m#### 3. GPU与批处理大小[m
+[32m+[m
+[32m+[m[32m**推理batch_size建议**：[m
+[32m+[m
+[32m+[m[32m| GPU型号 | VRAM | batch_size |[m
+[32m+[m[32m|---------|------|------------|[m
+[32m+[m[32m| RTX 3090 | 24GB | 128-256 |[m
+[32m+[m[32m| RTX 4090 | 24GB | 256-512 |[m
+[32m+[m[32m| A100 | 40GB | 512-1024 |[m
+[32m+[m[32m| RTX 3080 | 10GB | 64-128 |[m
+[32m+[m[32m| RTX 3070 | 8GB | 32-64 |[m
+[32m+[m
+[32m+[m[32m**显存不足？**[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 减小batch_size[m
+[32m+[m[32m./run_gaussiantalker.sh infer \[m
+[32m+[m[32m    --model_dir test_video \[m
+[32m+[m[32m    --audio_path speech.wav \[m
+[32m+[m[32m    --batch_size 64  # 从128降到64[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 🐛 常见问题排查[m
+[32m+[m
+[32m+[m[32m### 问题1：Docker构建失败[m
+[32m+[m
+[32m+[m[32m**症状**: `docker build`过程中报错[m
+[32m+[m
+[32m+[m[32m**可能原因和解决方案**：[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 1. 网络问题 - 使用镜像加速[m
+[32m+[m[32m# 编辑 /etc/docker/daemon.json[m
+[32m+[m[32m{[m
+[32m+[m[32m  "registry-mirrors": [[m
+[32m+[m[32m    "https://docker.mirrors.ustc.edu.cn",[m
+[32m+[m[32m    "https://registry.docker-cn.com"[m
+[32m+[m[32m  ][m
+[32m+[m[32m}[m
+[32m+[m[32msudo systemctl restart docker[m
+[32m+[m
+[32m+[m[32m# 2. 磁盘空间不足[m
+[32m+[m[32mdf -h[m
+[32m+[m[32mdocker system prune -a  # 清理未使用的镜像[m
+[32m+[m
+[32m+[m[32m# 3. CUDA版本不匹配[m
+[32m+[m[32mnvidia-smi  # 检查驱动版本[m
+[32m+[m[32m# 可能需要修改Dockerfile中的CUDA版本[m
 [
