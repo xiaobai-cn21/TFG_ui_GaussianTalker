@@ -1,0 +1,166 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  /* 这里的背景色是最后的退路 */
+  background-color: #050505; 
+  color: white;
+  overflow-x: hidden;
+}
+
+/* 强制修正 Canvas 的定位，防止被任何父容器包裹导致的尺寸失效 */
+canvas.bg-canvas {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; 
+  pointer-events: none;
+}
+
+/* 在src/assets/style.css中补充 */
+/* 平滑滚动效果 */
+html {
+  scroll-behavior: smooth;
+}
+
+/* 加载动画 */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.loading {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 表单元素聚焦效果统一化 */
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--primary-cyan);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+/* 按钮悬停动效增强 */
+.generate-btn {
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.generate-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.6s ease, height 0.6s ease;
+}
+
+.generate-btn:hover::after {
+  width: 300px;
+  height: 300px;
+}
+
+/* ===============================
+   主题颜色变量（暗色为默认）
+   =============================== */
+:root {
+  /* 背景 / 前景 */
+  --bg: #05091d;
+  --fg: #e1fffe;
+
+  /* 次级文字 */
+  --text-muted: #94a3b8;
+
+  /* 面板 / 卡片 */
+  --panel-bg: rgba(22, 34, 62, 0.6);
+  --panel-border: rgba(255, 255, 255, 0.08);
+
+  /* 强调主色 */
+  --accent: #22d3ee;
+
+  /* 图标主色 */
+  --icon-primary: #22d3ee;
+  --icon-secondary: #94a3b8;
+}
+
+/* ===============================
+   日间模式（html.light）
+   =============================== */
+html.light {
+  --bg: #e1fffe;
+  --fg: #05091d;
+
+  --text-muted: #475569;
+
+  --panel-bg: rgba(255, 255, 255, 0.65);
+  --panel-border: rgba(0, 0, 0, 0.08);
+
+  --accent: #2563eb;           /* 蓝色加深，避免发灰 */
+  --icon-primary: #1e293b;     /* 主图标变深 */
+  --icon-secondary: #334155;   /* 次级图标 */
+}
+
+/* ===============================
+   全局文字 & 背景绑定变量
+   =============================== */
+html, body {
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+/* ===============================
+   字体变量：默认字体栈（暗/亮/多主题都复用）
+   =============================== */
+:root {
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+               Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+               sans-serif;
+
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+               "Courier New", monospace;
+}
+
+/* 可选：标题字体也可单独变量化 */
+:root {
+  --font-display: var(--font-sans);
+}
+/* 变量别名：兼容现有组件命名，避免大面积改动 */
+:root {
+  --card: var(--panel-bg);
+  --border: var(--panel-border);
+  --secondary: var(--accent);
+}
+
+
+/* ===============================
+   字体选择：通过 html 的 class 切换变量
+   =============================== */
+html.font-system {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+               "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+html.font-inter {
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+               Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+html.font-noto {
+  --font-sans: "Noto Sans", "Noto Sans SC", system-ui, -apple-system, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+html.font-mono {
+  --font-sans: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+               "Courier New", monospace;
+}
