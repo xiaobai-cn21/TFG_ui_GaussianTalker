@@ -90,23 +90,35 @@ input:focus, select:focus, textarea:focus {
   /* 图标主色 */
   --icon-primary: #22d3ee;
   --icon-secondary: #94a3b8;
+
+  /* 阴影（暗色模式默认值） */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* ===============================
    日间模式（html.light）
    =============================== */
 html.light {
-  --bg: #e1fffe;
-  --fg: #05091d;
+  --bg: #f0f9ff;               /* 柔和的淡蓝灰背景 */
+  --fg: #0f172a;               /* 深色主文字，对比度更高 */
 
-  --text-muted: #475569;
+  --text-muted: #334155;       /* 次级文字加深，不再发灰 */
 
-  --panel-bg: rgba(255, 255, 255, 0.65);
-  --panel-border: rgba(0, 0, 0, 0.08);
+  --panel-bg: rgba(255, 255, 255, 0.92);  /* 面板更实，不透明 */
+  --panel-border: rgba(15, 23, 42, 0.15); /* 边框加深，可见度更高 */
 
-  --accent: #2563eb;           /* 蓝色加深，避免发灰 */
-  --icon-primary: #1e293b;     /* 主图标变深 */
-  --icon-secondary: #334155;   /* 次级图标 */
+  --accent: #0369a1;           /* 更深的蓝色强调色 */
+  --icon-primary: #0f172a;     /* 主图标深色 */
+  --icon-secondary: #1e293b;   /* 次级图标加深 */
+
+  /* 日间模式专用：表单输入框样式增强 */
+  --card: rgba(255, 255, 255, 0.95);
+  --border: rgba(15, 23, 42, 0.2);
+
+  /* 日间模式阴影 */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.1);
 }
 
 /* ===============================
@@ -163,4 +175,143 @@ html.font-noto {
 html.font-mono {
   --font-sans: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
                "Courier New", monospace;
+}
+
+/* ===============================
+   日间模式表单元素增强样式
+   =============================== */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.25) !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.15), 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* 日间模式：下拉选择框样式 */
+html.light select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* 日间模式：面板卡片阴影 */
+html.light .cyber-glass,
+html.light .cyber-form,
+html.light .monitor-section,
+html.light .control-section,
+html.light .recorder-card,
+html.light .video-preview-wrapper {
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+}
+
+/* 日间模式：按钮样式优化 */
+html.light .submit-btn,
+html.light .train-btn,
+html.light .chat-submit-btn {
+  background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(3, 105, 161, 0.3);
+}
+
+html.light .submit-btn:hover:not(:disabled),
+html.light .train-btn:hover:not(:disabled),
+html.light .chat-submit-btn:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(3, 105, 161, 0.4);
+  transform: translateY(-2px);
+}
+
+/* 日间模式：浏览按钮 */
+html.light .browse-btn {
+  background: rgba(3, 105, 161, 0.1);
+  border-color: rgba(3, 105, 161, 0.3);
+  color: #0369a1;
+}
+
+html.light .browse-btn:hover {
+  background: rgba(3, 105, 161, 0.2);
+}
+
+/* 日间模式：GPU卡片 */
+html.light .gpu-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  color: #334155;
+}
+
+html.light .gpu-card:hover {
+  border-color: rgba(15, 23, 42, 0.25);
+}
+
+html.light .gpu-card.active {
+  background: rgba(3, 105, 161, 0.1);
+  border-color: #0369a1;
+  color: #0369a1;
+}
+
+/* 日间模式：标签文字加深 */
+html.light label {
+  color: #1e293b !important;
+  font-weight: 600;
+}
+
+/* 日间模式：状态标签 */
+html.light .label,
+html.light .video-meta .label {
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.12);
+  color: #334155;
+}
+
+/* 日间模式：录音按钮 */
+html.light .record-action-btn,
+html.light .upload-action-btn {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+}
+
+html.light .record-action-btn:hover:not(.is-recording),
+html.light .upload-action-btn:hover {
+  border-color: #0369a1;
+  box-shadow: 0 4px 12px rgba(3, 105, 161, 0.15);
+}
+
+/* 日间模式：文本显示区域 */
+html.light .text-content {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.15);
+  color: #0f172a;
+}
+
+html.light .text-content.ai-text {
+  color: #0369a1;
+}
+
+/* 日间模式：分隔线 */
+html.light .divider::before,
+html.light .divider::after {
+  border-color: rgba(15, 23, 42, 0.15);
+}
+
+/* 日间模式：范围滑块 */
+html.light input[type="range"] {
+  background: rgba(15, 23, 42, 0.1) !important;
+}
+
+html.light input[type="range"]::-webkit-slider-thumb {
+  background: #0369a1;
 }
