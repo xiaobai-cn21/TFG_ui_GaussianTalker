@@ -62,10 +62,8 @@
               <label>算法模型</label>
               <div class="select-wrapper">
                 <select v-model="formData.model_name" name="model_name" @change="toggleGaussianTalkerOptions">
-                  <option value="model1">Model 1 (Standard)</option>
-                  <option value="model2">Model 2 (High-Res)</option>
-                  <option value="SyncTalk">SyncTalk (Ultra)</option>
-                  <option value="GaussianTalker">GaussianTalker (Advanced)</option>
+                  <option value="SyncTalk">SyncTalk</option>
+                  <option value="GaussianTalker">GaussianTalker</option>
                 </select>
               </div>
             </div>
@@ -75,8 +73,8 @@
               <label>运算核心 (GPU)</label>
               <div class="select-wrapper">
                 <select v-model="formData.gpu_choice" name="gpu_choice" @change="toggleCloudConfig">
-                  <option value="GPU0">NVIDIA RTX 3090 - 0</option>
-                  <option value="GPU1">NVIDIA RTX 3090 - 1</option>
+                  <option value="GPU0">GPU 0</option>
+                  <option value="GPU1">GPU 1</option>
                   <option value="cloud">Cloud (AutoDL)</option>
                 </select>
               </div>
@@ -274,12 +272,24 @@
         {{ toast.text }}
       </div>
     </Transition>
+
+    <!-- 进度条弹窗 -->
+    <ProgressSteps
+      :visible="progressState.visible"
+      title="视频生成中"
+      subtitle="VIDEO GENERATION IN PROGRESS"
+      :steps="progressState.steps"
+      :current-step="progressState.currentStep"
+      :status-message="progressState.statusMessage"
+      :cancellable="false"
+    />
   </div>
 </template>
 
 <script setup>
 import ThemeToggle from '../components/ThemeToggle.vue'
 import FontSelector from '../components/FontSelector.vue'
+import ProgressSteps from '../components/ProgressSteps.vue'
 
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -323,6 +333,26 @@ const toast = reactive({
   text: '',
   type: 'success'
 });
+
+// 进度条相关状态
+const progressState = reactive({
+  visible: false,
+  currentStep: 0,
+  statusMessage: '',
+  steps: [
+    { label: '参数验证', detail: '检查输入参数' },
+    { label: '音频处理', detail: '处理语音文件' },
+    { label: '特征提取', detail: '提取音频特征' },
+    { label: '模型推理', detail: '生成面部动画' },
+    { label: '视频合成', detail: '渲染最终视频' },
+    { label: '完成', detail: '准备播放' }
+  ]
+});
+
+const updateProgress = (step, message) => {
+  progressState.currentStep = step;
+  progressState.statusMessage = message;
+};
 
 const showToast = (text, type = 'success') => {
   toast.text = text;
@@ -434,7 +464,8 @@ const handleGenerate = async () => {
   }
 
   isGenerating.value = true;
-  showToast('开始生成视频，请稍候...', 'info');
+  progressState.visible = true;
+  updateProgress(0, '正在验证输入参数...');
 
   const payload = new FormData();
   Object.keys(formData).forEach(key => {
@@ -446,15 +477,30 @@ const handleGenerate = async () => {
   });
 
   try {
+    // 模拟进度更新（实际项目中可以通过WebSocket或轮询获取真实进度）
+    updateProgress(1, '正在处理音频文件...');
+    
     const response = await fetch('/video_generation', {
       method: 'POST',
       body: payload
     });
 
+    updateProgress(2, '正在提取音频特征...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    updateProgress(3, '模型推理中，请耐心等待...');
     const data = await response.json();
 
     if (data.status === 'success') {
+      updateProgress(4, '正在合成最终视频...');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      updateProgress(5, '视频生成完成！');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      progressState.visible = false;
       showToast('视频生成成功，正在刷新缓存', 'success');
+      
       if (videoRef.value) {
         const newSrc = data.video_path + '?t=' + new Date().getTime();
         videoRef.value.src = newSrc;
@@ -462,10 +508,12 @@ const handleGenerate = async () => {
         videoRef.value.play().catch(err => console.warn('自动播放受限:', err));
       }
     } else {
+      progressState.visible = false;
       showToast('生成失败: ' + (data.message || '后端处理异常'), 'error');
     }
   } catch (error) {
     console.error('Fetch Error:', error);
+    progressState.visible = false;
     showToast('网络连接失败，请检查后端服务', 'error');
   } finally {
     isGenerating.value = false;

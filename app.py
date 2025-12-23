@@ -1,10 +1,12 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 import os
 import uuid
 import threading
+import json
+import queue
 from backend.video_generator import generate_video
 from backend.model_trainer import train_model
-from backend.chat_engine import chat_response, chat_pipeline
+from backend.chat_engine import chat_response, chat_pipeline, chat_pipeline_with_progress
 
 app = Flask(__name__)
 
@@ -138,6 +140,90 @@ def chat_system():
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
     return render_template('chat_system.html')
+
+
+# SSE 实时进度推送的对话接口
+@app.route('/chat_system_stream', methods=['POST'])
+def chat_system_stream():
+    """使用 Server-Sent Events 实时推送对话进度"""
+    data = {
+        "model_name": request.form.get('model_name'),
+        "model_param": request.form.get('model_param'),
+        "voice_clone": request.form.get('voice_clone'),
+        "api_choice": request.form.get('api_choice'),
+        "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
+        "batch_size": request.form.get('batch_size', '128'),
+        "iteration": request.form.get('iteration', '10000'),
+        "ref_audio": request.form.get('ref_audio', ''),
+        "ssh_host": request.form.get('ssh_host', 'connect.bjb1.seetacloud.com'),
+        "ssh_port": request.form.get('ssh_port', 40258),
+        "ssh_password": request.form.get('ssh_password', '83WncIL5CoYB'),
+    }
+    
+    # 创建消息队列用于线程间通信
+    progress_queue = queue.Queue()
+    
+    def progress_callback(step, message, extra_data=None):
+        """进度回调函数，将进度放入队列"""
+        progress_queue.put({
+            'step': step,
+            'message': message,
+            'data': extra_data or {}
+        })
+    
+    def run_pipeline():
+        """在后台线程运行处理流程"""
+        try:
+            result = chat_pipeline_with_progress(data, progress_callback)
+            # 处理完成，发送最终结果
+            tts_url = "/" + result["tts_audio_path"].replace("\\", "/") if result.get("tts_audio_path") else None
+            video_url = "/" + result["video_path"].replace("\\", "/") if result.get("video_path") else None
+            progress_queue.put({
+                'step': 'complete',
+                'message': '处理完成',
+                'data': {
+                    'status': 'success',
+                    'recognized_text': result.get('recognized_text'),
+                    'ai_text': result.get('ai_text'),
+                    'tts_audio_url': tts_url,
+                    'video_path': video_url
+                }
+            })
+        except Exception as e:
+            progress_queue.put({
+                'step': 'error',
+                'message': str(e),
+                'data': {'status': 'error'}
+            })
+    
+    def generate():
+        """生成 SSE 事件流"""
+        # 启动后台处理线程
+        thread = threading.Thread(target=run_pipeline, daemon=True)
+        thread.start()
+        
+        # 持续从队列读取进度并推送
+        while True:
+            try:
+                progress = progress_queue.get(timeout=120)  # 2分钟超时
+                yield f"data: {json.dumps(progress, ensure_ascii=False)}\n\n"
+                
+                # 如果是完成或错误，结束流
+                if progress['step'] in ('complete', 'error'):
+                    break
+            except queue.Empty:
+                # 超时，发送心跳
+                yield f"data: {json.dumps({'step': 'heartbeat', 'message': '处理中...'})}\n\n"
+    
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
 
 @app.route('/chat/once', methods=['POST'])
 def chat_once():

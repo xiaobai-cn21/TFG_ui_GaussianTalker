@@ -309,12 +309,24 @@
         </div>
       </section>
     </main>
+
+    <!-- 进度条弹窗 -->
+    <ProgressSteps
+      :visible="progressState.visible"
+      title="对话处理中"
+      subtitle="CHAT PROCESSING IN PROGRESS"
+      :steps="progressState.steps"
+      :current-step="progressState.currentStep"
+      :status-message="progressState.statusMessage"
+      :cancellable="false"
+    />
   </div>
 </template>
 
 <script setup>
 import ThemeToggle from '../components/ThemeToggle.vue'
 import FontSelector from '../components/FontSelector.vue'
+import ProgressSteps from '../components/ProgressSteps.vue'
 
 import { ref, reactive, computed, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -366,6 +378,25 @@ const formData = reactive({
   iteration: 10000,
   api_choice: 'openai'
 });
+
+// 进度条相关状态
+const progressState = reactive({
+  visible: false,
+  currentStep: 0,
+  statusMessage: '',
+  steps: [
+    { label: '语音识别', detail: '转换语音为文字' },
+    { label: 'AI思考', detail: '生成智能回复' },
+    { label: '语音合成', detail: '生成TTS语音' },
+    { label: '数字人驱动', detail: '生成面部动画' },
+    { label: '完成', detail: '准备播放' }
+  ]
+});
+
+const updateProgress = (step, message) => {
+  progressState.currentStep = step;
+  progressState.statusMessage = message;
+};
 
 let mediaRecorder = null;
 let audioChunks = [];
@@ -422,7 +453,8 @@ const handleRefAudioChange = async (event) => {
 
     const data = await response.json();
     if (data.status === 'success') {
-      formData.ref_audio = (data.file_path || '').replace(/^\.\//, '/');
+      // 保留原始路径格式，后端需要相对路径 ./static/...
+      formData.ref_audio = data.file_path || '';
       statusText.value = '参考音频上传成功';
     } else {
       statusText.value = '上传失败';
@@ -536,7 +568,9 @@ const stopTimer = () => {
 
 const processChat = async () => {
   isProcessing.value = true;
+  progressState.visible = true;
   statusText.value = '处理对话中...';
+  updateProgress(0, '正在连接服务器...');
 
   const payload = new FormData();
   Object.keys(formData).forEach(key => {
@@ -546,40 +580,94 @@ const processChat = async () => {
   });
 
   try {
-    const res = await fetch('/chat_system', {
+    // 使用 SSE 流式接口获取实时进度
+    const res = await fetch('/chat_system_stream', {
       method: 'POST',
       body: payload
     });
 
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
 
-    if (data.status === 'success') {
-      recognizedText.value = data.recognized_text || '（无识别文本）';
-      aiText.value = data.ai_text || '（无AI回复）';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-      if (data.tts_audio_url) {
-        ttsSrc.value = data.tts_audio_url + '?t=' + Date.now();
-        if (ttsAudioRef.value) {
-          ttsAudioRef.value.load();
-          ttsAudioRef.value.play().catch(() => {});
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      
+      // 解析 SSE 数据（格式: "data: {...}\n\n"）
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || ''; // 保留未完成的部分
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            // 更新进度
+            if (data.step === 'heartbeat') {
+              // 心跳消息，忽略
+              continue;
+            } else if (data.step === 'complete') {
+              // 处理完成
+              const result = data.data;
+              if (result.status === 'success') {
+                recognizedText.value = result.recognized_text || '（无识别文本）';
+                aiText.value = result.ai_text || '（无AI回复）';
+
+                if (result.tts_audio_url) {
+                  ttsSrc.value = result.tts_audio_url + '?t=' + Date.now();
+                  if (ttsAudioRef.value) {
+                    ttsAudioRef.value.load();
+                    ttsAudioRef.value.play().catch(() => {});
+                  }
+                }
+
+                if (result.video_path) {
+                  videoSrc.value = result.video_path + '?t=' + Date.now();
+                  if (videoRef.value) {
+                    videoRef.value.load();
+                    videoRef.value.play().catch(() => {});
+                  }
+                }
+
+                updateProgress(4, '对话完成！');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                progressState.visible = false;
+                statusText.value = '对话完成';
+              }
+            } else if (data.step === 'error') {
+              progressState.visible = false;
+              statusText.value = '对话失败';
+              alert('对话失败: ' + data.message);
+            } else if (typeof data.step === 'number') {
+              // 进度更新
+              updateProgress(data.step, data.message);
+              
+              // 如果有额外数据，更新UI
+              if (data.data) {
+                if (data.data.recognized_text) {
+                  recognizedText.value = data.data.recognized_text;
+                }
+                if (data.data.ai_text) {
+                  aiText.value = data.data.ai_text;
+                }
+              }
+            }
+          } catch (parseErr) {
+            console.warn('SSE 数据解析失败:', parseErr, line);
+          }
         }
       }
-
-      if (data.video_path) {
-        videoSrc.value = data.video_path + '?t=' + Date.now();
-        if (videoRef.value) {
-          videoRef.value.load();
-          videoRef.value.play().catch(() => {});
-        }
-      }
-
-      statusText.value = '对话完成';
-    } else {
-      statusText.value = '对话失败';
-      alert('对话失败: ' + (data.message || '未知错误'));
     }
   } catch (err) {
     console.error('处理错误:', err);
+    progressState.visible = false;
     statusText.value = '请求失败';
     alert('请求失败: ' + err.message);
   } finally {

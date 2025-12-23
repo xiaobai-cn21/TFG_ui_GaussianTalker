@@ -71,10 +71,8 @@
               <div class="form-group">
                 <label><BoxIcon class="inline w-4 h-4 mr-1" /> 模型架构</label>
                 <select v-model="form.model_choice" @change="toggleGaussianTalkerOptions">
-                  <option value="modelA">Model A (Standard)</option>
-                  <option value="modelB">Model B (Deep)</option>
-                  <option value="SyncTalk">SyncTalk (High Precision)</option>
-                  <option value="GaussianTalker">GaussianTalker (Advanced)</option>
+                  <option value="SyncTalk">SyncTalk</option>
+                  <option value="GaussianTalker">GaussianTalker</option>
                 </select>
               </div>
 
@@ -228,6 +226,18 @@
         </section>
       </div>
     </div>
+
+    <!-- 进度条弹窗 -->
+    <ProgressSteps
+      :visible="progressState.visible"
+      title="模型训练中"
+      subtitle="MODEL TRAINING IN PROGRESS"
+      :steps="progressState.steps"
+      :current-step="progressState.currentStep"
+      :status-message="progressState.statusMessage"
+      :estimated-time="progressState.estimatedTime"
+      :cancellable="false"
+    />
   </div>
 </template>
 
@@ -235,6 +245,7 @@
 /** 外观控件：主题 + 字体（与 chat_system 对齐） */
 import ThemeToggle from '../components/ThemeToggle.vue'
 import FontSelector from '../components/FontSelector.vue'
+import ProgressSteps from '../components/ProgressSteps.vue'
 
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -275,6 +286,30 @@ const form = reactive({
   use_manual_au: false,
   custom_params: ''
 });
+
+// 进度条相关状态
+const progressState = reactive({
+  visible: false,
+  currentStep: 0,
+  statusMessage: '',
+  estimatedTime: '',
+  steps: [
+    { label: '环境准备', detail: '初始化训练环境' },
+    { label: '数据预处理', detail: '处理输入视频/图像' },
+    { label: '特征提取', detail: '提取面部特征点' },
+    { label: 'AU提取', detail: '提取Action Units' },
+    { label: '模型初始化', detail: '加载预训练权重' },
+    { label: '训练进行中', detail: '迭代优化模型' },
+    { label: '模型保存', detail: '保存训练结果' },
+    { label: '完成', detail: '训练完成' }
+  ]
+});
+
+const updateProgress = (step, message, time = '') => {
+  progressState.currentStep = step;
+  progressState.statusMessage = message;
+  progressState.estimatedTime = time;
+};
 
 const modelStatus = computed(() => {
   const models = {
@@ -367,7 +402,8 @@ const handleTraining = async () => {
   if (isTraining.value) return;
 
   isTraining.value = true;
-  alert('开始训练，这可能需要较长时间...');
+  progressState.visible = true;
+  updateProgress(0, '正在初始化训练环境...', '计算中...');
 
   try {
     const formData = new FormData();
@@ -382,19 +418,44 @@ const handleTraining = async () => {
       formData.append('au_csv', auFile.value);
     }
 
+    // 模拟进度更新
+    updateProgress(1, '正在预处理输入数据...', '约30分钟');
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    updateProgress(2, '正在提取面部特征点...', '约25分钟');
+    
     const response = await fetch('/model_training', {
       method: 'POST',
       body: formData
     });
 
+    updateProgress(3, '正在提取Action Units...', '约20分钟');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    updateProgress(4, '正在加载预训练模型...', '约15分钟');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const data = await response.json();
+    
     if (data.status === 'success') {
-      alert('训练完成！');
+      updateProgress(5, '模型训练中，请耐心等待...', '约10分钟');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      updateProgress(6, '正在保存模型权重...', '约1分钟');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      updateProgress(7, '训练完成！');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      progressState.visible = false;
+      alert('训练完成！模型已保存。');
     } else if (data.status === 'error') {
+      progressState.visible = false;
       alert('训练失败: ' + (data.message || '未知错误'));
     }
   } catch (err) {
     console.error('训练提交失败:', err);
+    progressState.visible = false;
     alert('训练提交失败: ' + err.message);
   } finally {
     isTraining.value = false;
