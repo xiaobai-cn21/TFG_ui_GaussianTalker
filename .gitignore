@@ -1,17 +1,132 @@
-# Python
+# ===============================
+# TFG_ui_GaussianTalker .gitignore
+# ===============================
+
+# ========== Python ==========
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
 .Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 
+# ========== Node.js / Frontend ==========
+# 依赖目录
+frontend_vue/node_modules/
+node_modules/
+
+# 构建输出
+frontend_vue/dist/
+dist/
+
+# 日志文件
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========== Vite 构建产物 ==========
+# 这些是每次构建生成的文件，不应上传
+static/js/
+static/css/main.css
+
+# ========== 运行时产生的临时文件 ==========
+# 音频文件（用户上传/生成的临时文件）
+static/audios/
+static/*.mp3
+static/*.wav
+
+# 视频文件（生成的视频）
+static/videos/*.mp4
+static/videos/*.mov
+static/videos/*.avi
+static/videos/*.csv
+static/videos/*.mp3
+
+# 文本临时文件
+static/text/
+
+# 临时目录
+temp/
+
+# ========== 测试文件夹 ==========
+testtt/
+testtt.rar
+test_data/
+
+# ========== 大型模型文件 ==========
+# Whisper 模型
+whisper_models/
+
+# PyTorch 模型权重
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# ========== 子项目特定忽略 ==========
+# GaussianTalker 数据目录（训练数据太大）
+GaussianTalker/data/
+GaussianTalker/output/
+GaussianTalker/tensorboard_3d/
+GaussianTalker/wandb/
+GaussianTalker/screenshots/
+GaussianTalker/build/
+GaussianTalker/$null
+
+# SyncTalk
 SyncTalk/SyncTalk/
 
+# VoiceClone 模型
+VoiceClone/OpenVoice-main/checkpoints/
+VoiceClone/OpenVoice-main/outputs/
+
+# GPT-SoVITS（如果存在）
 GPT-SoVITS/
 
-test_data/
-testtt/
-static/audios/*.wav
-static/videos/*.mp4
+# ========== IDE / 编辑器 ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========== 环境变量 ==========
+.env
+.env.local
+.env.*.local
+
+# ========== 日志 ==========
+*.log
+logs/
+
+# ========== 其他 ==========
+# 备份文件
+*.bak
+*.backup
+
+# 压缩文件（避免上传大型压缩包）
+*.rar
+*.zip
+*.7z
+*.tar.gz
+
+# 临时文件
+*.tmp
+*.temp

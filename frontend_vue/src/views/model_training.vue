@@ -176,8 +176,33 @@
                   />
                 </div>
 
+                <!-- 跳过预处理选项 -->
+                <div class="skip-preprocess-group">
+                  <div class="skip-checkbox">
+                    <input
+                      type="checkbox"
+                      id="skip_preprocess"
+                      v-model="form.skip_preprocess"
+                      @change="toggleSkipPreprocess"
+                    />
+                    <label for="skip_preprocess">跳过数据预处理（使用云端已有数据）</label>
+                  </div>
+                  <div v-if="form.skip_preprocess" class="model-name-input">
+                    <label>模型名称（云端已存在的数据目录名）</label>
+                    <input
+                      type="text"
+                      v-model="form.model_name"
+                      placeholder="如：May、obama、Jae-in"
+                      required
+                    />
+                    <div class="skip-hint">
+                      ⚠️ 请确保云端已存在该模型的预处理数据
+                    </div>
+                  </div>
+                </div>
+
                 <!-- AU文件上传 -->
-                <div class="au-upload-group">
+                <div v-if="!form.skip_preprocess" class="au-upload-group">
                   <div class="au-checkbox">
                     <input
                       type="checkbox"
@@ -284,7 +309,9 @@ const form = reactive({
   iterations: 10000,
   config: 'arguments/64_dim_1_transformer.py',
   use_manual_au: false,
-  custom_params: ''
+  custom_params: '',
+  skip_preprocess: false,  // 跳过数据预处理
+  model_name: ''           // 跳过预处理时使用的模型名称
 });
 
 // 进度条相关状态
@@ -346,6 +373,14 @@ const toggleAuUpload = () => {
   showAuUpload.value = form.use_manual_au;
 };
 
+const toggleSkipPreprocess = () => {
+  // 如果跳过预处理，清空视频路径（不需要上传）
+  if (form.skip_preprocess) {
+    form.use_manual_au = false;
+    showAuUpload.value = false;
+  }
+};
+
 const triggerFileUpload = () => {
   refFileInput.value?.click();
 };
@@ -401,57 +436,84 @@ const handleAuFileChange = (event) => {
 const handleTraining = async () => {
   if (isTraining.value) return;
 
+  // 验证：如果跳过预处理，必须提供模型名称
+  if (form.skip_preprocess && !form.model_name.trim()) {
+    alert('跳过预处理时必须提供模型名称');
+    return;
+  }
+
+  // 验证：如果不跳过预处理，必须提供视频
+  if (!form.skip_preprocess && !form.ref_video) {
+    alert('请先上传参考视频');
+    return;
+  }
+
   isTraining.value = true;
   progressState.visible = true;
-  updateProgress(0, '正在初始化训练环境...', '计算中...');
+  updateProgress(0, '正在连接服务器...', '');
 
   try {
     const formData = new FormData();
     Object.keys(form).forEach(key => {
-      if (key !== 'use_manual_au' && form[key] !== undefined && form[key] !== null) {
+      if (key === 'use_manual_au') {
+        formData.append(key, form[key] ? '1' : '0');
+      } else if (key === 'skip_preprocess') {
+        formData.append(key, form[key] ? '1' : '0');
+      } else if (form[key] !== undefined && form[key] !== null) {
         formData.append(key, form[key]);
       }
     });
-    formData.append('use_manual_au', form.use_manual_au ? '1' : '0');
 
     if (form.use_manual_au && auFile.value) {
       formData.append('au_csv', auFile.value);
     }
 
-    // 模拟进度更新
-    updateProgress(1, '正在预处理输入数据...', '约30分钟');
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    updateProgress(2, '正在提取面部特征点...', '约25分钟');
-    
-    const response = await fetch('/model_training', {
+    // 使用 SSE 流式接口获取实时进度
+    const res = await fetch('/model_training_stream', {
       method: 'POST',
       body: formData
     });
 
-    updateProgress(3, '正在提取Action Units...', '约20分钟');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    updateProgress(4, '正在加载预训练模型...', '约15分钟');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const data = await response.json();
-    
-    if (data.status === 'success') {
-      updateProgress(5, '模型训练中，请耐心等待...', '约10分钟');
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
       
-      updateProgress(6, '正在保存模型权重...', '约1分钟');
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      updateProgress(7, '训练完成！');
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      progressState.visible = false;
-      alert('训练完成！模型已保存。');
-    } else if (data.status === 'error') {
-      progressState.visible = false;
-      alert('训练失败: ' + (data.message || '未知错误'));
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            if (data.step === 'heartbeat') {
+              continue;
+            } else if (data.step === 'complete') {
+              updateProgress(7, '训练完成！');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              progressState.visible = false;
+              alert('训练完成！模型已保存到云端。');
+            } else if (data.step === 'error') {
+              progressState.visible = false;
+              alert('训练失败: ' + data.message);
+            } else if (typeof data.step === 'number') {
+              updateProgress(data.step, data.message);
+            }
+          } catch (parseErr) {
+            console.warn('SSE 数据解析失败:', parseErr, line);
+          }
+        }
+      }
     }
   } catch (err) {
     console.error('训练提交失败:', err);
@@ -817,6 +879,55 @@ onMounted(() => {
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 0.25rem;
   color: #ef4444;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.skip-preprocess-group {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--panel-border);
+}
+
+.skip-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.skip-checkbox label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.model-name-input {
+  margin-top: 0.75rem;
+}
+
+.model-name-input label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.model-name-input input {
+  width: 100%;
+  padding: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--fg);
+}
+
+.skip-hint {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 0.25rem;
+  color: #f59e0b;
   font-size: 0.7rem;
   text-align: center;
 }

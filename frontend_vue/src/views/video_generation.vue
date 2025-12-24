@@ -465,7 +465,7 @@ const handleGenerate = async () => {
 
   isGenerating.value = true;
   progressState.visible = true;
-  updateProgress(0, '正在验证输入参数...');
+  updateProgress(0, '正在连接服务器...');
 
   const payload = new FormData();
   Object.keys(formData).forEach(key => {
@@ -477,39 +477,61 @@ const handleGenerate = async () => {
   });
 
   try {
-    // 模拟进度更新（实际项目中可以通过WebSocket或轮询获取真实进度）
-    updateProgress(1, '正在处理音频文件...');
-    
-    const response = await fetch('/video_generation', {
+    // 使用 SSE 流式接口获取实时进度
+    const res = await fetch('/video_generation_stream', {
       method: 'POST',
       body: payload
     });
 
-    updateProgress(2, '正在提取音频特征...');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    updateProgress(3, '模型推理中，请耐心等待...');
-    const data = await response.json();
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
 
-    if (data.status === 'success') {
-      updateProgress(4, '正在合成最终视频...');
-      await new Promise(resolve => setTimeout(resolve, 300));
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let lastVideoPath = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
       
-      updateProgress(5, '视频生成完成！');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      progressState.visible = false;
-      showToast('视频生成成功，正在刷新缓存', 'success');
-      
-      if (videoRef.value) {
-        const newSrc = data.video_path + '?t=' + new Date().getTime();
-        videoRef.value.src = newSrc;
-        videoRef.value.load();
-        videoRef.value.play().catch(err => console.warn('自动播放受限:', err));
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            if (data.step === 'heartbeat') {
+              continue;
+            } else if (data.step === 'complete') {
+              updateProgress(6, '视频生成完成！');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              progressState.visible = false;
+              showToast('视频生成成功', 'success');
+              
+              lastVideoPath = data.data?.video_path || '';
+              if (videoRef.value && lastVideoPath) {
+                const newSrc = lastVideoPath + '?t=' + new Date().getTime();
+                videoRef.value.src = newSrc;
+                videoRef.value.load();
+                videoRef.value.play().catch(err => console.warn('自动播放受限:', err));
+              }
+            } else if (data.step === 'error') {
+              progressState.visible = false;
+              showToast('生成失败: ' + data.message, 'error');
+            } else if (typeof data.step === 'number') {
+              updateProgress(data.step, data.message);
+            }
+          } catch (parseErr) {
+            console.warn('SSE 数据解析失败:', parseErr, line);
+          }
+        }
       }
-    } else {
-      progressState.visible = false;
-      showToast('生成失败: ' + (data.message || '后端处理异常'), 'error');
     }
   } catch (error) {
     console.error('Fetch Error:', error);

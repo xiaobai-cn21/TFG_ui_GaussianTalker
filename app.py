@@ -71,6 +71,91 @@ def video_generation():
     return render_template('video_generation.html')
 
 
+# SSE 实时进度推送的视频生成接口
+@app.route('/video_generation_stream', methods=['POST'])
+def video_generation_stream():
+    """使用 Server-Sent Events 实时推送视频生成进度"""
+    from backend.video_generator import generate_video_with_progress
+    
+    data = {
+        "model_name": request.form.get('model_name'),
+        "model_param": request.form.get('model_param'),
+        "ref_audio": request.form.get('ref_audio'),
+        "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
+        "use_tts": request.form.get('use_tts') == 'on',
+        "tts_text": request.form.get('tts_text'),
+        "tts_ref_audio": request.form.get('tts_ref_audio'),
+        "batch_size": request.form.get('batch_size', '128'),
+        "iteration": request.form.get('iteration', '10000'),
+        "ssh_host": request.form.get('ssh_host', 'connect.bjb1.seetacloud.com'),
+        "ssh_port": request.form.get('ssh_port', 40258),
+        "ssh_password": request.form.get('ssh_password', '83WncIL5CoYB'),
+    }
+    
+    progress_queue = queue.Queue()
+    
+    def progress_callback(step, message, extra_data=None):
+        progress_queue.put({
+            'step': step,
+            'message': message,
+            'data': extra_data or {}
+        })
+    
+    def run_generation():
+        try:
+            result = generate_video_with_progress(data, progress_callback)
+            # 处理字典或字符串返回值
+            if isinstance(result, dict):
+                if result.get('status') == 'error':
+                    progress_queue.put({
+                        'step': 'error',
+                        'message': result.get('message', '未知错误'),
+                        'data': {'status': 'error'}
+                    })
+                else:
+                    progress_queue.put({
+                        'step': 'complete',
+                        'message': '视频生成完成',
+                        'data': {'status': 'success', 'video_path': result.get('video_path', '')}
+                    })
+            else:
+                video_path = "/" + result.replace("\\", "/") if result else ""
+                progress_queue.put({
+                    'step': 'complete',
+                    'message': '视频生成完成',
+                    'data': {'status': 'success', 'video_path': video_path}
+                })
+        except Exception as e:
+            progress_queue.put({
+                'step': 'error',
+                'message': str(e),
+                'data': {'status': 'error'}
+            })
+    
+    def generate():
+        thread = threading.Thread(target=run_generation, daemon=True)
+        thread.start()
+        
+        while True:
+            try:
+                progress = progress_queue.get(timeout=300)  # 5分钟超时
+                yield f"data: {json.dumps(progress, ensure_ascii=False)}\n\n"
+                if progress['step'] in ('complete', 'error'):
+                    break
+            except queue.Empty:
+                yield f"data: {json.dumps({'step': 'heartbeat', 'message': '生成中...'})}\n\n"
+    
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+
 # 模型训练界面
 @app.route('/model_training', methods=['GET', 'POST'])
 def model_training():
@@ -84,6 +169,9 @@ def model_training():
             # GaussianTalker专用参数
             "iterations": request.form.get('iterations', '10000'),
             "config": request.form.get('config', 'arguments/64_dim_1_transformer.py'),
+            # 跳过预处理选项
+            "skip_preprocess": request.form.get('skip_preprocess') == '1',
+            "model_name": request.form.get('model_name', ''),  # 跳过预处理时使用的模型名
         }
 
         # 处理AU文件上传（GaussianTalker）
@@ -105,6 +193,83 @@ def model_training():
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
     return render_template('model_training.html')
+
+
+# SSE 实时进度推送的模型训练接口
+@app.route('/model_training_stream', methods=['POST'])
+def model_training_stream():
+    """使用 Server-Sent Events 实时推送训练进度"""
+    from backend.model_trainer import train_model_with_progress
+    
+    data = {
+        "model_choice": request.form.get('model_choice'),
+        "ref_video": request.form.get('ref_video'),
+        "gpu_choice": request.form.get('gpu_choice', 'GPU0'),
+        "epoch": request.form.get('epoch', '10'),
+        "custom_params": request.form.get('custom_params'),
+        "iterations": request.form.get('iterations', '10000'),
+        "config": request.form.get('config', 'arguments/64_dim_1_transformer.py'),
+        "skip_preprocess": request.form.get('skip_preprocess') == '1',
+        "model_name": request.form.get('model_name', ''),
+        "ssh_port": request.form.get('ssh_port', 40258),
+        "ssh_password": request.form.get('ssh_password', '83WncIL5CoYB'),
+    }
+    
+    # 处理AU文件上传
+    if 'au_csv' in request.files and request.files['au_csv']:
+        au_csv_file = request.files['au_csv']
+        if au_csv_file.filename != '':
+            os.makedirs('./temp', exist_ok=True)
+            au_csv_path = f'./temp/{au_csv_file.filename}'
+            au_csv_file.save(au_csv_path)
+            data['au_csv'] = au_csv_path
+    
+    progress_queue = queue.Queue()
+    
+    def progress_callback(step, message, extra_data=None):
+        progress_queue.put({
+            'step': step,
+            'message': message,
+            'data': extra_data or {}
+        })
+    
+    def run_training():
+        try:
+            result = train_model_with_progress(data, progress_callback)
+            progress_queue.put({
+                'step': 'complete',
+                'message': '训练完成',
+                'data': {'status': 'success', 'video_path': result}
+            })
+        except Exception as e:
+            progress_queue.put({
+                'step': 'error',
+                'message': str(e),
+                'data': {'status': 'error'}
+            })
+    
+    def generate():
+        thread = threading.Thread(target=run_training, daemon=True)
+        thread.start()
+        
+        while True:
+            try:
+                progress = progress_queue.get(timeout=300)  # 5分钟超时
+                yield f"data: {json.dumps(progress, ensure_ascii=False)}\n\n"
+                if progress['step'] in ('complete', 'error'):
+                    break
+            except queue.Empty:
+                yield f"data: {json.dumps({'step': 'heartbeat', 'message': '训练中...'})}\n\n"
+    
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
 
 
 # 实时对话系统界面

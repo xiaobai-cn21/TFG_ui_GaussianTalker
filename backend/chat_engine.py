@@ -55,10 +55,21 @@ def chat_response(data):
     print(f"[backend.chat_engine] 生成视频路径：{video_path}")
     return video_path
 
-def chat_pipeline(data):
+def chat_pipeline(data, progress_callback=None):
+    """
+    对话处理流程
+    progress_callback: 可选的进度回调函数 (step, message, extra_data)
+    """
+    def report_progress(step, message, extra_data=None):
+        if progress_callback:
+            progress_callback(step, message, extra_data)
+        print(f"[chat_pipeline] Step {step}: {message}")
+    
     os.makedirs('./static/audios', exist_ok=True)
     os.makedirs('./static/text', exist_ok=True)
 
+    # 步骤 0: 语音识别
+    report_progress(0, '正在进行语音识别...')
     input_audio = "./static/audios/input.wav"
     input_text = "./static/text/input.txt"
     recognized_text = audio_to_text(input_audio, input_text)
@@ -66,7 +77,11 @@ def chat_pipeline(data):
     # 🚫 禁用兜底逻辑：语音识别必须成功才继续
     if not recognized_text:
         raise Exception("语音识别失败：无法识别音频内容，请检查麦克风或上传有效音频文件")
+    
+    report_progress(0, '语音识别完成', {'recognized_text': recognized_text})
 
+    # 步骤 1: AI 生成回复
+    report_progress(1, '正在调用AI生成回复...')
     output_text = "./static/text/output.txt"
     api_key = "59086bcdaac941d18fd92545b7417739.OSRp1IXGkA3OMKAQ"
     model = "glm-4-flash"
@@ -75,7 +90,12 @@ def chat_pipeline(data):
     # 🚫 禁用兜底逻辑：大模型必须成功响应才继续
     if not ai_response or ai_response.strip() == "":
         raise Exception("大模型响应失败：未能获取有效回复，请检查API配置")
+    
+    report_progress(1, 'AI回复生成完成', {'ai_text': ai_response})
 
+    # 步骤 2: 语音合成
+    report_progress(2, '正在进行语音合成...')
+    
     # 选择TTS：如果提供了参考音频就使用语音克隆，否则使用默认TTS
     output_audio = "./static/audios/ai_response.wav"
     tts_audio_path = None
@@ -83,9 +103,24 @@ def chat_pipeline(data):
     # 检查是否上传了参考音频（用于语音克隆）
     ref_audio_path = data.get('ref_audio', '').strip() if isinstance(data, dict) else ''
     
+    # 🔧 修复路径格式问题：
+    # 1. 统一使用正斜杠
+    # 2. 如果路径以 /static/ 开头，转换为 ./static/ 相对路径
+    if ref_audio_path:
+        ref_audio_path = ref_audio_path.replace('\\', '/')
+        if ref_audio_path.startswith('/static/'):
+            ref_audio_path = '.' + ref_audio_path
+        elif ref_audio_path.startswith('static/'):
+            ref_audio_path = './' + ref_audio_path
+    
     print(f"[backend.chat_engine] 🔍 检查参考音频参数: ref_audio='{ref_audio_path}'")
     
-    if ref_audio_path and os.path.exists(ref_audio_path):
+    # 检查文件是否存在
+    ref_audio_exists = ref_audio_path and os.path.exists(ref_audio_path)
+    print(f"[backend.chat_engine] 🔍 参考音频文件存在: {ref_audio_exists}")
+    
+    if ref_audio_exists:
+        report_progress(2, '使用语音克隆合成语音...')
         print(f"[backend.chat_engine] ✅ 使用参考音频进行语音克隆: {ref_audio_path}")
         try:
             tts_audio_path = synthesize_with_clone(ai_response, ref_audio_path, output_audio, language='zh')
@@ -97,7 +132,10 @@ def chat_pipeline(data):
         print("[backend.chat_engine] 未提供参考音频，使用默认TTS")
 
     if not tts_audio_path:
+        report_progress(2, '使用默认TTS合成语音...')
         tts_audio_path = text_to_speech(ai_response, output_audio)
+    
+    report_progress(2, '语音合成完成')
 
     # ==== 新增：GaussianTalker数字人视频生成 ====
     video_path = os.path.join("static", "videos", "chat_response.mp4")
@@ -108,6 +146,8 @@ def chat_pipeline(data):
     
     # 如果选择了数字人模型并提供了模型目录，则生成数字人视频
     if model_name and model_param and tts_audio_path and os.path.exists(tts_audio_path):
+        # 步骤 3: 数字人视频生成
+        report_progress(3, f'正在驱动数字人模型 ({model_name})...')
         print(f"[backend.chat_engine] 开始生成数字人视频：模型={model_name}, 目录={model_param}")
         try:
             from backend.video_generator import generate_video
@@ -132,17 +172,24 @@ def chat_pipeline(data):
             if video_gen_result and isinstance(video_gen_result, str) and os.path.exists(video_gen_result):
                 video_path = video_gen_result
                 print(f"[backend.chat_engine] 数字人视频生成成功：{video_path}")
+                report_progress(3, '数字人视频生成完成')
             else:
                 print(f"[backend.chat_engine] 数字人视频生成失败或文件不存在：{video_gen_result}")
+                report_progress(3, '数字人视频生成失败，使用占位视频')
                 # 失败时使用占位视频（保持原有行为）
                 
         except Exception as e:
             print(f"[backend.chat_engine] 数字人视频生成异常：{e}")
             import traceback
             traceback.print_exc()
+            report_progress(3, f'数字人视频生成异常: {str(e)[:50]}')
             # 异常时使用占位视频（保持原有行为）
     else:
+        report_progress(3, '跳过数字人生成（未选择模型）')
         print("[backend.chat_engine] 未启用数字人视频生成（未选择模型或音频不可用）")
+    
+    # 步骤 4: 完成
+    report_progress(4, '处理完成！')
     
     return {
         "recognized_text": recognized_text,
@@ -320,6 +367,11 @@ def get_ai_response(input_text, output_text, api_key, model):
         except Exception:
             pass
         return fallback
+
+def chat_pipeline_with_progress(data, progress_callback):
+    """带进度回调的对话处理流程（SSE 接口使用）"""
+    return chat_pipeline(data, progress_callback)
+
 
 def text_to_speech(text, output_audio_path):
     """
