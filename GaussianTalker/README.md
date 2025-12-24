@@ -1,152 +1,176 @@
-# GaussianTalker: Real-Time High-Fidelity Talking Head Synthesis with Audio-Driven 3D Gaussian Splatting (ACM MM 2024)
-<a href="https://arxiv.org/abs/2404.16012v2"><img src="https://img.shields.io/badge/arXiv-2404.16012v2-%23B31B1B"></a>
-<a href="https://ku-cvlab.github.io/GaussianTalker"><img src="https://img.shields.io/badge/Project%20Page-online-brightgreen"></a>
-<br>
+# 说话人脸生成对话系统
 
-This is our official implementation of the paper 
+基于 GaussianTalker 和 SyncTalk 的数字人视频生成系统，支持模型训练、视频生成和实时对话功能。
 
-"GaussianTalker: Real-Time High-Fidelity Talking Head Synthesis with Audio-Driven 3D Gaussian Splatting"
-
-by [Kyusun Cho](https://github.com/kyustorm7)\*, [Joungbin Lee](https://github.com/joungbinlee)\*, [Heeji Yoon](https://github.com/yoon-heez)\*, [Yeobin Hong](https://github.com/yeobinhong), [Jaehoon Ko](https://github.com/mlnyang), Sangjun Ahn, [Seungryong Kim](https://cvlab.korea.ac.kr)<sup>&dagger;</sup>
-
-## ⚡️News
-**❗️2024.06.13:** We also generated the torso in the same space as the face using Gaussian splatting. **After cloning the torso branch**, you can train and render it in the same way to use it.
-
-
-## Introduction
-![image](./docs/structure.png)
-<!-- <br> -->
-
-For more information, please check out our [Paper](https://arxiv.org/abs/2404.16012v2) and our [Project page](https://ku-cvlab.github.io/GaussianTalker/).
-
-## Installation
-We implemented & tested **GaussianTalker** with NVIDIA RTX 3090 and A6000 GPU.
-
-Run the below codes for the environment setting. ( details are in requirements.txt )
-```bash
-git clone https://github.com/joungbinlee/GaussianTalker.git
-cd GaussianTalker
-git submodule update --init --recursive
-conda create -n GaussianTalker python=3.7 
-conda activate GaussianTalker
-
-pip install -r requirements.txt
-pip install -e submodules/custom-bg-depth-diff-gaussian-rasterization
-pip install -e submodules/simple-knn
-pip install "git+https://github.com/facebookresearch/pytorch3d.git"
-pip install tensorflow-gpu==2.8.0
-pip install --upgrade "protobuf<=3.20.1"
-```
-
-
-## Download Dataset
-
-We used talking portrait videos from [AD-NeRF](https://github.com/YudongGuo/AD-NeRF), [GeneFace](https://github.com/yerfor/GeneFace) and [HDTF dataset](https://github.com/MRzzm/HDTF). 
-These are static videos whose average length are about 3~5 minutes.
-
-You can see an example video with the below line:
+## 系统架构
 
 ```
-wget https://github.com/YudongGuo/AD-NeRF/blob/master/dataset/vids/Obama.mp4?raw=true -O data/obama/obama.mp4
+┌─────────────────────────────────────────────────────────────┐
+│                    前端 (Vue 3 + Vite)                       │
+│  ┌─────────┐  ┌─────────────┐  ┌──────────────┐             │
+│  │ 首页    │  │ 模型训练    │  │ 视频生成     │             │
+│  └────┬────┘  └──────┬──────┘  └──────┬───────┘             │
+│       │              │                │                      │
+│  ┌────┴──────────────┴────────────────┴───────┐             │
+│  │           实时对话系统                      │             │
+│  └────────────────────┬───────────────────────┘             │
+└───────────────────────┼─────────────────────────────────────┘
+                        │ SSE 实时进度推送
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    后端 (Flask)                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│  │model_trainer│  │video_generator│ │chat_engine │          │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘          │
+│         │                │                │                  │
+│  ┌──────┴────────────────┴────────────────┴──────┐          │
+│  │           云端训练/渲染 (AutoDL SSH)           │          │
+│  └───────────────────────────────────────────────┘          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-We also used [SynObama](https://grail.cs.washington.edu/projects/AudioToObama/) for cross-driven setting inference.
+## 核心功能
 
+### 1. 模型训练
+- 支持 **GaussianTalker** 和 **SyncTalk** 两种模型
+- 支持本地 GPU 和云端训练（AutoDL SSH）
+- **跳过预处理功能**：若云端已有预处理数据，可跳过耗时的数据预处理步骤
+- 实时进度推送（SSE）
 
-## Data Preparation
+### 2. 视频生成
+- 上传音频或使用 TTS 语音克隆生成音频
+- 支持本地渲染和云端渲染
+- 实时进度推送（SSE）
 
-- prepare face-parsing model.
+### 3. 实时对话
+- 语音识别（Whisper）
+- AI 对话（智谱 AI）
+- 语音克隆（XTTS v2）
+- 数字人视频生成
+- 实时进度推送（SSE）
+
+## 快速开始
+
+### 1. 安装后端依赖
 
 ```bash
-wget https://github.com/YudongGuo/AD-NeRF/blob/master/data_util/face_parsing/79999_iter.pth?raw=true -O data_utils/face_parsing/79999_iter.pth
+pip install flask paramiko scp
+# 可选：语音识别、TTS 等依赖
+pip install openai-whisper TTS pyttsx3 zhipuai speech_recognition
 ```
 
-- Download 3DMM model from [Basel Face Model 2009](https://faces.dmi.unibas.ch/bfm/main.php?nav=1-1-0&id=details) 
-
-Put "01_MorphableModel.mat" to data_utils/face_tracking/3DMM/ 
-    
-```bash
-cd data_utils/face_tracking
-python convert_BFM.py
-cd ../../
-python data_utils/process.py ${YOUR_DATASET_DIR}/${DATASET_NAME}/${DATASET_NAME}.mp4 
-```
-
-- Obtain AU45 for eyes blinking
-  
-Run `FeatureExtraction` in [OpenFace](https://github.com/TadasBaltrusaitis/OpenFace), rename and move the output CSV file to `(your dataset dir)/(dataset name)/au.csv`.
-
-
-```
-├── (your dataset dir)
-│   | (dataset name)
-│       ├── gt_imgs
-│           ├── 0.jpg
-│           ├── 1.jgp
-│           ├── 2.jgp
-│           ├── ...
-│       ├── ori_imgs
-│           ├── 0.jpg
-│           ├── 0.lms
-│           ├── 1.jgp
-│           ├── 1.lms
-│           ├── ...
-│       ├── parsing
-│           ├── 0.png
-│           ├── 1.png
-│           ├── 2.png
-│           ├── 3.png
-│           ├── ...
-│       ├── torso_imgs
-│           ├── 0.png
-│           ├── 1.png
-│           ├── 2.png
-│           ├── 3.png
-│           ├── ...
-│       ├── au.csv
-│       ├── aud_ds.npy
-│       ├── aud_novel.wav
-│       ├── aud_train.wav
-│       ├── aud.wav
-│       ├── bc.jpg
-│       ├── (dataset name).mp4
-│       ├── track_params.pt
-│       ├── transforms_train.json
-│       ├── transforms_val.json
-```
-
-## Training
-
+### 2. 安装前端依赖并构建
 
 ```bash
-python train.py -s ${YOUR_DATASET_DIR}/${DATASET_NAME} --model_path ${YOUR_MODEL_DIR} --configs arguments/64_dim_1_transformer.py 
+cd frontend_vue
+npm install
+npm run build
 ```
 
+> 构建后的静态文件会输出到项目根目录的 `static/` 目录
 
-## Rendering
-
-Please adjust the batch size to match your GPU settings.
+⚠️ **重要**：构建完成后，需要手动将根目录下生成的 HTML 文件移动到 `templates/` 目录：
 
 ```bash
-python render.py -s ${YOUR_DATASET_DIR}/${DATASET_NAME} --model_path ${YOUR_MODEL_DIR} --configs arguments/64_dim_1_transformer.py --iteration 10000 --batch 128
-```
-    
-## Inference with custom audio
+# Windows
+move *.html templates\
 
-Please locate the files <custom_aud>.wav and <custom_aud>.npy in the following directory path: ${YOUR_DATASET_DIR}/${DATASET_NAME}.
+# Linux/Mac
+mv *.html templates/
+```
+
+### 3. 启动后端服务
 
 ```bash
-python render.py -s ${YOUR_DATASET_DIR}/${DATASET_NAME} --model_path ${YOUR_MODEL_DIR} --configs arguments/64_dim_1_transformer.py --iteration 10000 --batch 128 --custom_aud <custom_aud>.npy --custom_wav <custom_aud>.wav --skip_train --skip_test
+python app.py
 ```
 
-## Citation
-If you find our work useful in your research, please cite our work as:
+### 4. 访问应用
+
+打开浏览器访问：http://127.0.0.1:5001
+
+## 前端开发模式
+
+如需进行前端开发调试：
+
+```bash
+cd frontend_vue
+npm run dev
 ```
-@inproceedings{cho2024gaussiantalker,
-  title={Gaussiantalker: Real-time talking head synthesis with 3d gaussian splatting},
-  author={Cho, Kyusun and Lee, Joungbin and Yoon, Heeji and Hong, Yeobin and Ko, Jaehoon and Ahn, Sangjun and Kim, Seungryong},
-  booktitle={Proceedings of the 32nd ACM International Conference on Multimedia},
-  pages={10985--10994},
-  year={2024}
-}
+
+开发服务器会在 http://localhost:5173 启动，并代理 API 请求到后端。
+
+## 目录结构
+
 ```
+TFG_ui_GaussianTalker/
+├── app.py                 # Flask 主入口
+├── backend/
+│   ├── model_trainer.py   # 模型训练逻辑
+│   ├── video_generator.py # 视频生成逻辑
+│   ├── chat_engine.py     # 对话系统核心
+│   ├── cloud_trainer.py   # 云端训练/渲染
+│   └── voice_cloner.py    # 语音克隆
+├── frontend_vue/          # Vue 前端源码
+│   ├── src/
+│   │   ├── views/         # 页面组件
+│   │   ├── components/    # 通用组件
+│   │   └── assets/        # 样式资源
+│   └── vite.config.js
+├── static/                # 静态资源
+│   ├── audios/            # 音频文件
+│   ├── videos/            # 视频文件
+│   ├── js/                # 构建后的 JS
+│   └── css/               # 构建后的 CSS
+├── GaussianTalker/        # GaussianTalker 模型
+└── SyncTalk/              # SyncTalk 模型
+```
+
+## 功能使用说明
+
+### 模型训练
+
+1. 选择模型类型（GaussianTalker / SyncTalk）
+2. 上传训练视频
+3. 选择 GPU（本地 GPU0/GPU1 或 云端）
+4. 若使用云端训练，配置 SSH 端口和密码
+5. **跳过预处理（可选）**：若云端已有预处理数据，勾选此项并填写模型名称即可跳过预处理步骤
+6. 点击开始训练，实时查看进度
+
+### 视频生成
+
+1. 选择已训练的模型
+2. 上传驱动音频，或使用 TTS 语音克隆
+3. 选择渲染设备（本地/云端）
+4. 点击生成，实时查看进度
+
+### 实时对话
+
+1. 选择数字人模型
+2. 上传参考音频（用于语音克隆）
+3. 点击麦克风录音或输入文字
+4. 系统自动进行语音识别 → AI 回复 → 语音合成 → 视频生成
+
+## 主题切换
+
+前端支持日间/夜间模式切换，点击右上角的主题按钮即可切换。
+
+## 注意事项
+
+- 云端训练需要有效的 AutoDL SSH 凭据
+- 首次使用语音克隆功能时会下载 XTTS v2 模型（约 2GB）
+- 首次使用语音识别时会下载 Whisper 模型
+- 建议使用 Chrome 或 Edge 浏览器以获得最佳体验
+
+## 技术栈
+
+- **前端**: Vue 3, Vite, Tailwind CSS, Lucide Icons
+- **后端**: Flask, Python
+- **AI 模型**: GaussianTalker, SyncTalk, Whisper, XTTS v2, 智谱 AI
+
+## GaussianTalker 模型说明
+
+本项目中的 GaussianTalker 模型经过独特优化，包括数据预处理流程改进、Docker 容器化部署等。
+
+📖 **详细文档**：
+- [GaussianTalker Docker 调用说明](./GaussianTalker/GaussianTalker_Docker调用说明.md) - 容器化部署与调用方法
